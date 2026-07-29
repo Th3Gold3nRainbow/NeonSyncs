@@ -26,8 +26,7 @@ Windows users: grab the latest installer from the
 - Optional server password (useful for a server exposed on the
   internet via No-IP/DynDNS)
 - Dark UI with a neon accent
-- Windows packaging included: build a `.exe` (PyInstaller) and a full
-  installer (Inno Setup) with icon and English/French language choice
+- Windows packaging included: build a `.exe` (PyInstaller) with icon and English/French language choice
 
 ## Architecture
 
