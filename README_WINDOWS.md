@@ -1,66 +1,62 @@
-# Créer l'installeur Windows (.exe) de SyncMPV
+# Building the Windows installer (.exe)
 
-Ce dossier contient tout le nécessaire pour transformer `client.py` en
-un vrai installeur Windows double-cliquable. **Ces scripts doivent être
-exécutés sur une machine Windows** (PyInstaller ne fait pas de
-compilation croisée depuis Linux/Mac).
+This folder contains everything needed to turn `client.py` into a real,
+double-clickable Windows installer. **These scripts must be run on a
+Windows machine** (PyInstaller doesn't cross-compile from Linux/Mac).
 
-## Étapes
+## Steps
 
-### 1. Récupérer libmpv pour Windows
+### 1. Get libmpv for Windows
 
-`python-mpv` a besoin de la DLL native `libmpv`. Téléchargez-la ici :
+`python-mpv` needs the native `libmpv` DLL. Download it here:
 https://github.com/shinchiro/mpv-winbuild-cmake/releases
 
-Prenez une archive `mpv-dev-x86_64-...7z` (ou `mpv-x86_64-...7z`),
-extrayez-en `libmpv-2.dll`, et **placez-la dans ce dossier en la
-renommant `mpv-2.dll`** (ou `mpv-1.dll` selon la version de
-`python-mpv` installée — le message d'erreur au lancement vous dira
-laquelle il cherche si besoin d'ajuster).
+Grab an `mpv-dev-x86_64-...7z` (or `mpv-x86_64-...7z`) archive, extract
+`libmpv-2.dll` from it, and **place it in this same folder, renamed to
+`mpv-2.dll`** (or `mpv-1.dll` depending on your installed `python-mpv`
+version — the error message at launch will tell you which one it's
+looking for if you need to adjust).
 
-### 2. Compiler le .exe
+### 2. Build the .exe
 
-Double-cliquez sur `build_exe.bat` (ou lancez-le depuis un terminal).
-Il va :
-- créer un environnement virtuel Python,
-- installer les dépendances (`PyQt5`, `python-mpv`, `pyinstaller`),
-- produire `dist\SyncMPV.exe`, un exécutable autonome (la DLL mpv est
-  embarquée dedans).
+Double-click `build_exe.bat` (or run it from a terminal). It will:
+- create a Python virtual environment,
+- install dependencies (`PyQt5`, `python-mpv`, `pyinstaller`),
+- produce `dist\SyncMPV.exe`, a standalone executable (the mpv DLL is
+  bundled inside it).
 
-Vous pouvez déjà distribuer `dist\SyncMPV.exe` tel quel — ça fonctionne
-sans installation, en portable.
+You can already distribute `dist\SyncMPV.exe` as-is — it works without
+installation, portable-style.
 
-### 3. (Optionnel mais recommandé) Générer un vrai installeur
+### 3. (Optional but recommended) Build a real installer
 
-Pour un installeur avec raccourcis Bureau/menu Démarrer et
-désinstallation propre via le Panneau de configuration :
+For an installer with Desktop/Start Menu shortcuts and clean
+uninstall through Control Panel:
 
-1. Installez **Inno Setup** : https://jrsoftware.org/isdl.php
-2. Vérifiez que `icon.ico`, `wizard-image.bmp` et `wizard-small-image.bmp`
-   (fournis avec le projet — logo moderne généré pour SyncMPV) sont bien
-   dans le même dossier que `installer.iss`.
-3. Lancez `build_installer.bat`, ou ouvrez `installer.iss` directement
-   dans Inno Setup Compiler et faites *Build > Compile*.
-4. Résultat : `Output\SyncMPV-Setup.exe` — c'est le fichier à
-   distribuer à vos utilisateurs.
+1. Install **Inno Setup**: https://jrsoftware.org/isdl.php
+2. Make sure `icon.ico`, `wizard-image.bmp` and `wizard-small-image.bmp`
+   (included with the project — the SyncMPV logo) are in the same
+   folder as `installer.iss`.
+3. Run `build_installer.bat`, or open `installer.iss` directly in Inno
+   Setup Compiler and hit *Build > Compile*.
+4. Result: `Output\SyncMPV-Setup.exe` — that's the file to distribute
+   to users.
 
-L'installeur affiche désormais un logo (icône + bandeau latéral) et
-propose un choix de langue **Anglais / Français** dès son lancement,
-avant même l'écran de bienvenue.
+The installer shows a language picker (English / French) right at
+launch, and a custom logo (icon + side banner).
 
-## Résumé du flux
+## Overall flow
 
 ```
 client.py  --(PyInstaller, build_exe.bat)-->  dist\SyncMPV.exe
 dist\SyncMPV.exe  --(Inno Setup, build_installer.bat)-->  Output\SyncMPV-Setup.exe
 ```
 
-## Le serveur (`server.py`) reste à part
+## The server (`server.py`) doesn't need packaging
 
-`server.py` n'a pas besoin d'être packagé en `.exe` — c'est généralement
-un composant qu'on héberge sur un serveur/VPS ou qu'on lance en tâche
-de fond sur une machine toujours allumée. Si vous voulez aussi un
-`.exe` pour le serveur (ex: pour qu'un utilisateur non-technique puisse
-l'héberger), le même `build_exe.bat` fonctionne en remplaçant
-`client.py` par `server.py` (sans le `--windowed` ni la DLL mpv, qui ne
-sont pas nécessaires côté serveur).
+`server.py` doesn't need to be turned into a `.exe` — it's typically
+something you run on a VPS/server or in the background on an
+always-on machine. If you want a `.exe` for the server too (e.g. so a
+non-technical user can host it), the same `build_exe.bat` works with
+`server.py` instead of `client.py` (drop `--windowed` and the mpv DLL,
+neither is needed server-side).

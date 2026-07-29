@@ -1,25 +1,44 @@
 # SyncMPV
 
-Un clone minimal de [Syncplay](https://syncplay.pl) avec un lecteur **MPV
-intégré directement dans la fenêtre** (pas de fenêtre externe à lancer à
-côté) — via `libmpv` / `python-mpv`.
+Watch videos in perfect sync with friends anywhere — built-in mpv player,
+real-time playback sync, chat, and fullscreen. No fuss, no external
+player window.
+
+A PyQt5 client + Python asyncio server for watching videos together,
+staying perfectly in sync (play, pause, seek) no matter where everyone
+is, with built-in chat.
+
+## Features
+
+- mpv video player embedded directly in the interface (no separate
+  window to juggle)
+- Automatic sync of play/pause/position across everyone in a room
+- Built-in text chat
+- Fullscreen (`F` / `F11` key, double-click, `Esc` to exit)
+- Fast forward/rewind (⏪10s/30s, 30s/10s⏩ buttons, or arrow keys
+  ←/→ ±10s, ↑/↓ ±60s)
+- Optional server password (useful for a server exposed on the
+  internet via No-IP/DynDNS)
+- Dark UI with a neon accent
+- Windows packaging included: build a `.exe` (PyInstaller) and a full
+  installer (Inno Setup) with icon and English/French language choice
 
 ## Architecture
 
-- `server.py` : serveur central (asyncio). Gère des "salons" (rooms) et
-  rediffuse l'état de lecture (lecture/pause, position, fichier) à tous
-  les clients connectés à un même salon.
-- `client.py` : client PyQt5. La fenêtre vidéo est un `mpv.MPV` intégré
-  (rendu directement dans un `QFrame`, via son `winId()`), avec un
-  panneau latéral pour la connexion, la liste des utilisateurs et le chat.
+- `server.py` — central server (asyncio). Manages "rooms" and
+  broadcasts playback state to every client connected to the same
+  room.
+- `client.py` — PyQt5 client. The video player is an `mpv.MPV`
+  instance embedded directly into a `QFrame` (via its `winId()`),
+  alongside a side panel for connecting, the user list, and chat.
 
-## Installation
+## Installation (Linux / macOS)
 
-### 1. Dépendance système : libmpv
+### 1. System dependency: libmpv
 
 ```bash
 # Debian / Ubuntu
-sudo apt install libmpv2   # ou libmpv-dev / libmpv1 selon la version de la distro
+sudo apt install libmpv2   # or libmpv-dev / libmpv1 depending on your distro
 
 # Arch
 sudo pacman -S mpv
@@ -28,7 +47,7 @@ sudo pacman -S mpv
 brew install mpv
 ```
 
-### 2. Dépendances Python
+### 2. Python dependencies
 
 ```bash
 python3 -m venv venv
@@ -36,68 +55,64 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Utilisation
+## Installation (Windows)
 
-### Démarrer le serveur (sur une machine accessible par tous, ou en local pour tester)
+See [README_WINDOWS.md](README_WINDOWS.md) to build a `.exe` and a full
+Windows installer (icon, language choice, shortcuts).
+
+## Usage
+
+### Start the server
 
 ```bash
 python3 server.py --host 0.0.0.0 --port 8999
 ```
 
-Si le serveur est exposé sur internet (par ex. via un service de DNS
-dynamique comme No-IP), il est fortement recommandé d'ajouter un mot
-de passe pour éviter que n'importe qui puisse rejoindre votre salon :
+If the server is exposed to the internet (e.g. via a dynamic DNS
+service like No-IP), add a password so random people can't join your
+room:
 
 ```bash
-python3 server.py --host 0.0.0.0 --port 8999 --password votremotdepasse
+python3 server.py --host 0.0.0.0 --port 8999 --password yourpassword
 ```
 
-Chaque client devra alors renseigner le même mot de passe dans le
-champ correspondant du panneau de connexion.
-
-### Démarrer un client
+### Start a client
 
 ```bash
 python3 client.py
 ```
 
-Dans la fenêtre :
-1. Renseigner l'hôte/port du serveur, un nom de salon (identique pour
-   tout le monde) et un pseudo, puis cliquer sur **Se connecter**.
-2. Cliquer sur **Ouvrir un fichier…** pour choisir une vidéo locale
-   (chaque participant doit avoir le même fichier sur son disque —
-   comme avec Syncplay, seul l'état de lecture est synchronisé, pas le
-   flux vidéo lui-même).
-3. Lecture, pause et déplacement dans la vidéo sont automatiquement
-   répercutés chez tous les autres participants du salon.
+In the window:
+1. Fill in the server host/port, a room name (same for everyone), a
+   username, and the password if the server requires one, then click
+   **Connect**.
+2. Click **Open a file…** to pick a local video (each participant
+   needs the same file on their own disk — like Syncplay, only
+   playback state is synced, not the video stream itself).
+3. Play, pause, and seeking are automatically mirrored to every other
+   participant in the room.
 
-## Comment fonctionne la synchronisation
+## How the sync works
 
-- Chaque client envoie son état (pause/position/fichier) au serveur
-  quand un événement local se produit (pause, seek) ou toutes les
-  `STATE_SEND_INTERVAL` secondes (3s par défaut, réglable dans
-  `client.py`).
-- Le serveur retient le dernier état connu du salon et le redonne à
-  tout nouveau client qui rejoint, puis rediffuse chaque mise à jour
-  aux autres.
-- Un client qui reçoit un état distant ne resynchronise sa position
-  que si l'écart dépasse `SEEK_THRESHOLD` (1s par défaut), pour éviter
-  les micro-saccades.
-- Un court délai (`IGNORE_ECHO_WINDOW`) évite qu'un client renvoie
-  immédiatement l'état qu'il vient de recevoir, ce qui provoquerait des
-  boucles inutiles.
+- Each client sends its state (pause/position/file) to the server
+  whenever a local event happens (pause, seek), or every 3 seconds
+  otherwise.
+- The server keeps the room's last known state, hands it to any new
+  client that joins, then rebroadcasts every update to the others.
+- A client receiving a remote state only re-seeks if the gap is more
+  than 1 second, to avoid micro-stutters.
 
-## Limites connues / pistes d'amélioration
+## Known limitations / possible improvements
 
-- Pas de compensation fine de latence réseau (ping/pong basique déjà
-  présent côté protocole, mais pas encore exploité pour corriger la
-  position exacte).
-- Pas de gestion de "playlist" partagée, uniquement un fichier à la fois.
-- Pas de chiffrement/authentification : à utiliser sur un réseau de
-  confiance (VPN, LAN) ou à mettre derrière un reverse proxy TLS pour
-  un usage sur Internet ouvert.
-- Le chat et la liste d'utilisateurs sont volontairement basiques.
+- No fine-grained network latency compensation yet (a basic ping/pong
+  already exists in the protocol, but isn't used yet to correct exact
+  position).
+- No shared playlist, one file at a time only.
+- No end-to-end encryption: use on a trusted network, or put it behind
+  a TLS reverse proxy for internet-facing use.
+- Not compatible with the official public Syncplay server (different
+  protocol) — you need to host your own instance of `server.py`.
 
-Toutes ces pistes sont faciles à ajouter dans `server.py` /
-`client.py` si besoin — dites-moi ce que vous voulez approfondir en
-premier.
+## License
+
+[MIT](LICENSE)
