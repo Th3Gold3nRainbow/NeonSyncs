@@ -8,6 +8,12 @@ A PyQt5 client + Python asyncio server for watching videos together,
 staying perfectly in sync (play, pause, seek) no matter where everyone
 is, with built-in chat.
 
+## Download
+
+Windows users: grab the latest installer from the
+**[Releases page](https://github.com/Th3Gold3nRainbow/SyncMPV/releases)**
+— no need to build anything yourself.
+
 ## Features
 
 - mpv video player embedded directly in the interface (no separate
