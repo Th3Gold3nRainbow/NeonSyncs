@@ -1,0 +1,110 @@
+@echo off
+setlocal
+
+REM ============================================================
+REM  build_exe.bat - a executer sur une machine WINDOWS
+REM  Compile client.py en un .exe autonome grace a PyInstaller.
+REM ============================================================
+
+echo [1/5] Verification de Python...
+where python >nul 2>nul
+if errorlevel 1 (
+    echo.
+    echo ERREUR: Python n'est pas installe ou pas dans le PATH.
+    echo Installez Python depuis https://www.python.org/downloads/
+    echo IMPORTANT: cochez "Add python.exe to PATH" pendant l'installation.
+    echo.
+    pause
+    exit /b 1
+)
+echo OK.
+
+echo.
+echo [2/5] Creation de l'environnement virtuel...
+python -m venv venv
+if errorlevel 1 (
+    echo.
+    echo ERREUR: la creation de l'environnement virtuel a echoue.
+    echo.
+    pause
+    exit /b 1
+)
+
+call venv\Scripts\activate.bat
+if errorlevel 1 (
+    echo.
+    echo ERREUR: impossible d'activer l'environnement virtuel.
+    echo.
+    pause
+    exit /b 1
+)
+echo OK.
+
+echo.
+echo [3/5] Installation des dependances (cela peut prendre quelques minutes)...
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+if errorlevel 1 (
+    echo.
+    echo ERREUR: l'installation des dependances a echoue.
+    echo Verifiez votre connexion internet et le contenu de requirements.txt
+    echo.
+    pause
+    exit /b 1
+)
+pip install pyinstaller
+if errorlevel 1 (
+    echo.
+    echo ERREUR: l'installation de pyinstaller a echoue.
+    echo.
+    pause
+    exit /b 1
+)
+echo OK.
+
+echo.
+echo [4/5] Verification des fichiers necessaires...
+
+set MISSING=0
+
+if not exist mpv-2.dll (
+    echo ATTENTION: mpv-2.dll est introuvable dans ce dossier.
+    echo Le programme ne fonctionnera pas sans elle.
+    echo Telechargez libmpv pour Windows, voir README_WINDOWS.md
+    set MISSING=1
+)
+
+if not exist icon.ico (
+    echo ATTENTION: icon.ico est introuvable dans ce dossier.
+    echo L'executable sera compile avec l'icone Windows par defaut.
+    set MISSING=1
+)
+
+if "%MISSING%"=="1" (
+    echo.
+    echo Vous pouvez continuer sans ces fichiers, mais le resultat sera incomplet.
+    echo Appuyez sur une touche pour continuer quand meme, ou fermez cette
+    echo fenetre pour ajouter les fichiers manquants avant de relancer.
+    pause
+)
+
+echo.
+echo [5/5] Compilation avec PyInstaller...
+pyinstaller --noconfirm --onefile --windowed --name SyncMPV --icon icon.ico --add-binary "mpv-2.dll;." client.py
+if errorlevel 1 (
+    echo.
+    echo ERREUR: la compilation PyInstaller a echoue.
+    echo Faites defiler vers le haut pour voir le detail de l'erreur.
+    echo.
+    pause
+    exit /b 1
+)
+
+echo.
+echo ============================================================
+echo Termine ! L'executable se trouve dans dist\SyncMPV.exe
+echo Vous pouvez maintenant lancer build_installer.bat (Inno Setup)
+echo pour generer un vrai installeur Windows.
+echo ============================================================
+echo.
+pause
