@@ -182,6 +182,8 @@ def _apply_dark_titlebar(widget):
 SEEK_THRESHOLD = 1.0       # secondes d'écart tolérées avant de resynchroniser
 STATE_SEND_INTERVAL = 3.0  # envoi périodique de l'état même sans événement
 IGNORE_ECHO_WINDOW = 0.8   # évite de renvoyer un état qu'on vient de recevoir
+MIN_CORRECTION_INTERVAL = 2.0  # anti-rebond : pas 2 corrections en moins de 2s
+BIG_JUMP_THRESHOLD = 10.0      # au-dela, on corrige immediatement (vrai seek)
 
 
 class NetworkClient(QObject):
@@ -197,16 +199,17 @@ class NetworkClient(QObject):
         self.buf = b""
         self.running = False
         self.lock = threading.Lock()
+        self.estimated_latency = 0.0  # secondes, mise a jour via ping/pong
 
     def connect_to(self, host, port, room, username, password=""):
         try:
             self.sock = socket.create_connection((host, port), timeout=5)
-            # IMPORTANT : create_connection() applique le timeout de connexion
-            # (5s) au socket de façon PERMANENTE tant qu'on ne le desactive pas.
-            # Sans cette ligne, recv() finit par lever une exception "timeout"
-            # des qu'aucune donnee n'arrive pendant 5s (ex: quand on est seul
-            # dans le salon) — ce qui etait pris a tort pour une deconnexion.
             self.sock.settimeout(None)
+            # Desactive l'algorithme de Nagle : sans ca, de petits messages
+            # JSON envoyes frequemment peuvent etre mis en attente/regroupes
+            # par le systeme, ajoutant une latence supplementaire qui nuit
+            # a la synchronisation.
+            self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         except OSError as e:
             self.connected_signal.emit(False, str(e))
             return
@@ -242,6 +245,18 @@ class NetworkClient(QObject):
                     msg = json.loads(line.decode("utf-8"))
                 except json.JSONDecodeError:
                     continue
+                if msg.get("type") == "pong":
+                    try:
+                        rtt = time.time() - float(msg.get("t", 0))
+                        if 0 <= rtt < 5:  # ignore les valeurs aberrantes
+                            one_way = rtt / 2
+                            # moyenne mobile pour lisser les variations
+                            self.estimated_latency = (
+                                0.7 * self.estimated_latency + 0.3 * one_way
+                            )
+                    except (TypeError, ValueError):
+                        pass
+                    continue
                 self.message_received.emit(msg)
         was_running = self.running
         self.running = False
@@ -273,6 +288,7 @@ class SyncMPVWindow(QWidget):
         self.net.disconnected_signal.connect(self.on_disconnected)
 
         self.last_remote_state_at = 0.0
+        self.last_correction_at = 0.0
         self.applying_remote = False  # évite les boucles d'écho
         self.current_file = None
         self.current_duration = 0.0
@@ -302,6 +318,12 @@ class SyncMPVWindow(QWidget):
         self.send_timer = QTimer(self)
         self.send_timer.timeout.connect(self.periodic_state_push)
         self.send_timer.start(int(STATE_SEND_INTERVAL * 1000))
+
+        # Mesure reguliere de la latence reseau (ping/pong), utilisee pour
+        # compenser le retard des positions recues des autres participants.
+        self.ping_timer = QTimer(self)
+        self.ping_timer.timeout.connect(self.send_ping)
+        self.ping_timer.start(2000)
 
     # ------------------------------------------------------------------
     # UI
@@ -415,11 +437,18 @@ class SyncMPVWindow(QWidget):
 
     def _init_mpv(self):
         # Intègre mpv directement dans le QFrame (pas de fenêtre externe)
+        # NOTE : hwdec="no" desactive le decodage materiel (GPU). C'est
+        # volontaire : avec l'integration via "wid", le decodage materiel
+        # (hwdec="auto") provoque un ECRAN NOIR sur pas mal de cartes
+        # graphiques/pilotes — probleme connu de libmpv en mode embarque.
+        # Cout : un peu plus de charge CPU, mais une compatibilite bien
+        # plus large et fiable.
         self.player = mpv.MPV(
             wid=str(int(self.video_frame.winId())),
             input_default_bindings=True,
             input_vo_keyboard=True,
             osc=True,
+            hwdec="no",
         )
 
         @self.player.property_observer("pause")
@@ -585,6 +614,10 @@ class SyncMPVWindow(QWidget):
         if self.net.running:
             self.push_state()
 
+    def send_ping(self):
+        if self.net.running:
+            self.net.send({"type": "ping", "t": time.time()})
+
     def on_message(self, msg: dict):
         mtype = msg.get("type")
         if mtype == "state":
@@ -609,14 +642,34 @@ class SyncMPVWindow(QWidget):
             if remote_file and remote_file != self.current_file:
                 self.current_file = remote_file
                 self.player.play(remote_file)
+                self.last_correction_at = 0.0  # nouveau fichier : pas de debounce
 
             if remote_position is not None:
                 try:
                     local_pos = float(self.player.time_pos or 0.0)
                 except Exception:
                     local_pos = 0.0
-                if abs(local_pos - remote_position) > SEEK_THRESHOLD:
-                    self.player.seek(remote_position, reference="absolute")
+                gap = abs(local_pos - remote_position)
+                now = time.time()
+
+                if gap > SEEK_THRESHOLD:
+                    big_jump = gap > BIG_JUMP_THRESHOLD
+                    time_since_last = now - self.last_correction_at
+                    if big_jump or time_since_last > MIN_CORRECTION_INTERVAL:
+                        try:
+                            local_duration = float(self.player.duration or 0.0)
+                        except Exception:
+                            local_duration = 0.0
+                        # Si la position distante depasse la duree du fichier
+                        # local, les deux fichiers ne sont probablement PAS
+                        # strictement identiques (encodage/montage different
+                        # malgre le meme nom) : on n'essaie pas de corriger,
+                        # ca eviterait juste une boucle de rattrapage sans fin.
+                        if local_duration and remote_position > local_duration + 2.0:
+                            pass
+                        else:
+                            self.player.seek(remote_position, reference="absolute")
+                            self.last_correction_at = now
 
             if remote_paused is not None:
                 self.player.pause = bool(remote_paused)
@@ -624,7 +677,18 @@ class SyncMPVWindow(QWidget):
             pass
         finally:
             self.last_remote_state_at = time.time()
-            self.applying_remote = False
+            # IMPORTANT : on ne remet PAS applying_remote a False ici,
+            # immediatement. Les evenements mpv ("seek", changement de
+            # "pause") declenches par NOS PROPRES appels ci-dessus
+            # arrivent de facon ASYNCHRONE, dans le thread interne de
+            # libmpv — parfois APRES la fin de cette fonction. Si on
+            # remettait le drapeau tout de suite, notre propre correction
+            # serait alors prise pour une action de l'utilisateur et
+            # rediffusee vers les autres participants, qui se
+            # corrigeraient a leur tour, etc. => boucle de correction
+            # sans fin (effet "ca replay en boucle"). On laisse donc un
+            # court delai avant de rouvrir la detection d'actions locales.
+            QTimer.singleShot(400, lambda: setattr(self, "applying_remote", False))
 
     def closeEvent(self, event):
         self.net.close()
