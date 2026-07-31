@@ -29,6 +29,10 @@ Avancer / reculer :
   - Flèches gauche/droite (±10s) et haut/bas (±60s) du clavier,
     liées explicitement (fiables même quand la vidéo a le focus),
     synchronisées avec les autres participants.
+  - Barre de progression glissable (au-dessus des boutons) : cliquez
+    ou faites-la glisser pour aller directement où vous voulez dans
+    la vidéo. Synchronisée avec les autres participants dès que vous
+    relâchez.
 
 Mot de passe serveur :
   - Champ optionnel dans le panneau de connexion.
@@ -38,6 +42,7 @@ Mot de passe serveur :
     et remplissez le même mot de passe côté client.
 """
 import sys
+import os
 import json
 import socket
 import threading
@@ -46,12 +51,110 @@ import time
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QLabel, QFileDialog, QListWidget, QSplitter, QFrame,
-    QShortcut
+    QShortcut, QSlider
 )
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QKeySequence, QIcon
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
 
 import mpv
+
+
+# ---------------------------------------------------------------------------
+# Internationalisation — la langue choisie a l'installation (ecrite par
+# l'installateur Inno Setup dans "lang.txt", a cote de l'executable) est
+# lue ici. Par defaut : francais si le fichier est absent (ex: lancement
+# depuis les sources sans passer par l'installateur).
+# ---------------------------------------------------------------------------
+STRINGS = {
+    "fr": {
+        "window_title": "SyncMPV — lecture synchronisée",
+        "open_file": "Ouvrir un fichier…",
+        "back_30": "⏪ 30s",
+        "back_10": "⏪ 10s",
+        "play_pause": "Lecture / Pause",
+        "fwd_10": "10s ⏩",
+        "fwd_30": "30s ⏩",
+        "fullscreen": "Plein écran (F11)",
+        "section_server": "SERVEUR",
+        "label_host": "Hôte",
+        "label_port": "Port",
+        "label_room": "Salon",
+        "label_user": "Pseudo",
+        "label_password": "Mot de passe",
+        "password_placeholder": "(optionnel)",
+        "connect": "Se connecter",
+        "status_disconnected": "Déconnecté",
+        "status_connected": "Connecté",
+        "status_error": "Erreur : {message}",
+        "status_disconnected_lost": "Déconnecté (connexion perdue)",
+        "section_users": "UTILISATEURS",
+        "section_chat": "CHAT",
+        "chat_placeholder": "Écrire un message…",
+        "send": "Envoyer",
+        "chat_not_connected": "⚠ Non connecté — connectez-vous d'abord au serveur.",
+    },
+    "en": {
+        "window_title": "SyncMPV — synchronized playback",
+        "open_file": "Open a file…",
+        "back_30": "⏪ 30s",
+        "back_10": "⏪ 10s",
+        "play_pause": "Play / Pause",
+        "fwd_10": "10s ⏩",
+        "fwd_30": "30s ⏩",
+        "fullscreen": "Fullscreen (F11)",
+        "section_server": "SERVER",
+        "label_host": "Host",
+        "label_port": "Port",
+        "label_room": "Room",
+        "label_user": "Username",
+        "label_password": "Password",
+        "password_placeholder": "(optional)",
+        "connect": "Connect",
+        "status_disconnected": "Disconnected",
+        "status_connected": "Connected",
+        "status_error": "Error: {message}",
+        "status_disconnected_lost": "Disconnected (connection lost)",
+        "section_users": "USERS",
+        "section_chat": "CHAT",
+        "chat_placeholder": "Type a message…",
+        "send": "Send",
+        "chat_not_connected": "⚠ Not connected — connect to a server first.",
+    },
+}
+
+
+def _base_dir():
+    """Dossier contenant l'executable (ou le script, si lance depuis les
+    sources) — c'est la ou l'installateur place icon.ico et lang.txt."""
+    return os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
+
+
+def _detect_language():
+    """Langue choisie a l'installation (fichier lang.txt ecrit par Inno
+    Setup a cote de l'executable), sinon francais par defaut."""
+    try:
+        lang_file = os.path.join(_base_dir(), "lang.txt")
+        with open(lang_file, "r", encoding="utf-8") as f:
+            content = f.read().strip().lower()
+        if "english" in content or content == "en":
+            return "en"
+        if "french" in content or content == "fr":
+            return "fr"
+    except Exception:
+        pass
+    return "fr"
+
+
+LANG = _detect_language()
+
+ICON_PATH = os.path.join(_base_dir(), "icon.ico")
+
+
+def tr(key, **kwargs):
+    text = STRINGS.get(LANG, STRINGS["fr"]).get(key, key)
+    if kwargs:
+        return text.format(**kwargs)
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +258,37 @@ QWidget#panel {
 QWidget#controlsBar {
     background-color: #0e1016;
 }
+QLabel#timeLabel {
+    color: #9aa0ac;
+    font-size: 9pt;
+    min-width: 48px;
+}
+QSlider::groove:horizontal {
+    height: 5px;
+    background: #1c2028;
+    border-radius: 2px;
+}
+QSlider::sub-page:horizontal {
+    height: 5px;
+    background: #39f2c8;
+    border-radius: 2px;
+}
+QSlider::add-page:horizontal {
+    height: 5px;
+    background: #1c2028;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    background: #e4e6eb;
+    border: 2px solid #39f2c8;
+    border-radius: 7px;
+}
+QSlider::handle:horizontal:hover {
+    background: #39f2c8;
+}
 """
 
 
@@ -184,6 +318,21 @@ STATE_SEND_INTERVAL = 3.0  # envoi périodique de l'état même sans événement
 IGNORE_ECHO_WINDOW = 0.8   # évite de renvoyer un état qu'on vient de recevoir
 MIN_CORRECTION_INTERVAL = 2.0  # anti-rebond : pas 2 corrections en moins de 2s
 BIG_JUMP_THRESHOLD = 10.0      # au-dela, on corrige immediatement (vrai seek)
+SEEK_BAR_RESOLUTION = 2000     # precision interne de la barre de progression
+PROGRESS_UPDATE_INTERVAL = 400  # ms entre deux rafraichissements de la barre
+
+
+def format_time(seconds):
+    """Formate des secondes en 'm:ss' ou 'h:mm:ss'."""
+    try:
+        seconds = max(0, int(seconds))
+    except (TypeError, ValueError):
+        seconds = 0
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
 
 
 class NetworkClient(QObject):
@@ -279,7 +428,9 @@ class SyncMPVWindow(QWidget):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SyncMPV — lecture synchronisée")
+        self.setWindowTitle(tr("window_title"))
+        if os.path.exists(ICON_PATH):
+            self.setWindowIcon(QIcon(ICON_PATH))
         self.resize(1100, 650)
 
         self.net = NetworkClient()
@@ -293,6 +444,7 @@ class SyncMPVWindow(QWidget):
         self.current_file = None
         self.current_duration = 0.0
         self.is_fullscreen = False
+        self.is_seeking_via_slider = False
 
         self._build_ui()
         self._init_mpv()
@@ -318,6 +470,10 @@ class SyncMPVWindow(QWidget):
         self.send_timer = QTimer(self)
         self.send_timer.timeout.connect(self.periodic_state_push)
         self.send_timer.start(int(STATE_SEND_INTERVAL * 1000))
+
+        self.progress_timer = QTimer(self)
+        self.progress_timer.timeout.connect(self.update_progress_ui)
+        self.progress_timer.start(PROGRESS_UPDATE_INTERVAL)
 
         # Mesure reguliere de la latence reseau (ping/pong), utilisee pour
         # compenser le retard des positions recues des autres participants.
@@ -345,20 +501,41 @@ class SyncMPVWindow(QWidget):
         # Barre de contrôle (masquée en plein écran)
         self.controls_widget = QWidget(self)
         self.controls_widget.setObjectName("controlsBar")
-        controls = QHBoxLayout(self.controls_widget)
-        self.btn_open = QPushButton("Ouvrir un fichier…")
+        controls_container = QVBoxLayout(self.controls_widget)
+        controls_container.setContentsMargins(10, 6, 10, 8)
+        controls_container.setSpacing(4)
+
+        # --- Barre de progression (glissable) + temps écoulé / durée ---
+        progress_row = QHBoxLayout()
+        self.time_current_label = QLabel("0:00")
+        self.time_current_label.setObjectName("timeLabel")
+        self.seek_slider = QSlider(Qt.Horizontal)
+        self.seek_slider.setRange(0, SEEK_BAR_RESOLUTION)
+        self.seek_slider.setValue(0)
+        self.seek_slider.sliderPressed.connect(self.on_slider_pressed)
+        self.seek_slider.sliderReleased.connect(self.on_slider_released)
+        self.time_total_label = QLabel("0:00")
+        self.time_total_label.setObjectName("timeLabel")
+        progress_row.addWidget(self.time_current_label)
+        progress_row.addWidget(self.seek_slider, stretch=1)
+        progress_row.addWidget(self.time_total_label)
+        controls_container.addLayout(progress_row)
+
+        # --- Boutons (ouvrir, avance/retour, lecture, plein écran) ---
+        controls = QHBoxLayout()
+        self.btn_open = QPushButton(tr("open_file"))
         self.btn_open.clicked.connect(self.open_file)
-        self.btn_back30 = QPushButton("⏪ 30s")
+        self.btn_back30 = QPushButton(tr("back_30"))
         self.btn_back30.clicked.connect(lambda: self.seek_relative(-30))
-        self.btn_back10 = QPushButton("⏪ 10s")
+        self.btn_back10 = QPushButton(tr("back_10"))
         self.btn_back10.clicked.connect(lambda: self.seek_relative(-10))
-        self.btn_play = QPushButton("Lecture / Pause")
+        self.btn_play = QPushButton(tr("play_pause"))
         self.btn_play.clicked.connect(self.toggle_pause)
-        self.btn_fwd10 = QPushButton("10s ⏩")
+        self.btn_fwd10 = QPushButton(tr("fwd_10"))
         self.btn_fwd10.clicked.connect(lambda: self.seek_relative(10))
-        self.btn_fwd30 = QPushButton("30s ⏩")
+        self.btn_fwd30 = QPushButton(tr("fwd_30"))
         self.btn_fwd30.clicked.connect(lambda: self.seek_relative(30))
-        self.btn_fullscreen = QPushButton("Plein écran (F11)")
+        self.btn_fullscreen = QPushButton(tr("fullscreen"))
         self.btn_fullscreen.clicked.connect(self.toggle_fullscreen)
         controls.addWidget(self.btn_open)
         controls.addWidget(self.btn_back30)
@@ -367,6 +544,8 @@ class SyncMPVWindow(QWidget):
         controls.addWidget(self.btn_fwd10)
         controls.addWidget(self.btn_fwd30)
         controls.addWidget(self.btn_fullscreen)
+        controls_container.addLayout(controls)
+
         left.addWidget(self.controls_widget)
 
         left_widget = QWidget(self)
@@ -381,7 +560,7 @@ class SyncMPVWindow(QWidget):
         right.setContentsMargins(14, 14, 14, 14)
         right.setSpacing(6)
 
-        lbl_server = QLabel("SERVEUR")
+        lbl_server = QLabel(tr("section_server"))
         lbl_server.setProperty("role", "section")
         right.addWidget(lbl_server)
 
@@ -391,43 +570,43 @@ class SyncMPVWindow(QWidget):
         self.input_user = QLineEdit("invite")
         self.input_password = QLineEdit()
         self.input_password.setEchoMode(QLineEdit.Password)
-        self.input_password.setPlaceholderText("(optionnel)")
+        self.input_password.setPlaceholderText(tr("password_placeholder"))
         for w, label in [
-            (self.input_host, "Hôte"),
-            (self.input_port, "Port"),
-            (self.input_room, "Salon"),
-            (self.input_user, "Pseudo"),
-            (self.input_password, "Mot de passe"),
+            (self.input_host, tr("label_host")),
+            (self.input_port, tr("label_port")),
+            (self.input_room, tr("label_room")),
+            (self.input_user, tr("label_user")),
+            (self.input_password, tr("label_password")),
         ]:
             right.addWidget(QLabel(label))
             right.addWidget(w)
 
-        self.btn_connect = QPushButton("Se connecter")
+        self.btn_connect = QPushButton(tr("connect"))
         self.btn_connect.setProperty("role", "primary")
         self.btn_connect.clicked.connect(self.do_connect)
         right.addWidget(self.btn_connect)
 
-        self.status_label = QLabel("Déconnecté")
+        self.status_label = QLabel(tr("status_disconnected"))
         self.status_label.setProperty("role", "status")
         right.addWidget(self.status_label)
 
-        lbl_users = QLabel("UTILISATEURS")
+        lbl_users = QLabel(tr("section_users"))
         lbl_users.setProperty("role", "section")
         right.addWidget(lbl_users)
         self.user_list = QListWidget()
         self.user_list.setMaximumHeight(110)
         right.addWidget(self.user_list)
 
-        lbl_chat = QLabel("CHAT")
+        lbl_chat = QLabel(tr("section_chat"))
         lbl_chat.setProperty("role", "section")
         right.addWidget(lbl_chat)
         self.chat_list = QListWidget()
         right.addWidget(self.chat_list, stretch=1)
         chat_row = QHBoxLayout()
         self.chat_input = QLineEdit()
-        self.chat_input.setPlaceholderText("Écrire un message…")
+        self.chat_input.setPlaceholderText(tr("chat_placeholder"))
         self.chat_input.returnPressed.connect(self.send_chat)
-        btn_send = QPushButton("Envoyer")
+        btn_send = QPushButton(tr("send"))
         btn_send.clicked.connect(self.send_chat)
         chat_row.addWidget(self.chat_input)
         chat_row.addWidget(btn_send)
@@ -540,6 +719,49 @@ class SyncMPVWindow(QWidget):
         # attendre l'événement 'seek' ou le prochain envoi périodique.
         self.push_state(force=True)
 
+    def on_slider_pressed(self):
+        # Pendant que l'utilisateur fait glisser la barre, on arrête de
+        # la mettre à jour automatiquement (sinon ça "combat" son geste).
+        self.is_seeking_via_slider = True
+
+    def on_slider_released(self):
+        self.is_seeking_via_slider = False
+        try:
+            duration = float(self.player.duration or 0.0)
+        except Exception:
+            duration = 0.0
+        if duration <= 0:
+            return
+        fraction = self.seek_slider.value() / SEEK_BAR_RESOLUTION
+        target = max(0.0, min(fraction * duration, duration))
+        try:
+            self.player.seek(target, reference="absolute")
+        except Exception:
+            return
+        # Synchronise immédiatement les autres participants.
+        self.push_state(force=True)
+
+    def update_progress_ui(self):
+        """Rafraîchit la barre de progression et les labels de temps.
+        N'est PAS appliqué pendant que l'utilisateur fait glisser la
+        barre lui-même (voir on_slider_pressed)."""
+        if self.is_seeking_via_slider:
+            return
+        try:
+            pos = float(self.player.time_pos or 0.0)
+            duration = float(self.player.duration or 0.0)
+        except Exception:
+            pos, duration = 0.0, 0.0
+
+        self.time_current_label.setText(format_time(pos))
+        self.time_total_label.setText(format_time(duration))
+
+        if duration > 0:
+            value = int((pos / duration) * SEEK_BAR_RESOLUTION)
+            self.seek_slider.blockSignals(True)
+            self.seek_slider.setValue(max(0, min(value, SEEK_BAR_RESOLUTION)))
+            self.seek_slider.blockSignals(False)
+
     def toggle_fullscreen(self):
         if self.is_fullscreen:
             self.exit_fullscreen()
@@ -571,10 +793,10 @@ class SyncMPVWindow(QWidget):
         self.net.connect_to(host, port, room, user, password)
 
     def on_connected(self, ok, message):
-        self.status_label.setText("Connecté" if ok else f"Erreur: {message}")
+        self.status_label.setText(tr("status_connected") if ok else tr("status_error", message=message))
 
     def on_disconnected(self):
-        self.status_label.setText("Déconnecté (connexion perdue)")
+        self.status_label.setText(tr("status_disconnected_lost"))
         self.user_list.clear()
 
     def send_chat(self):
@@ -582,7 +804,7 @@ class SyncMPVWindow(QWidget):
         if not text:
             return
         if not self.net.running:
-            self.chat_list.addItem("⚠ Non connecté — connectez-vous d'abord au serveur.")
+            self.chat_list.addItem(tr("chat_not_connected"))
             self.chat_list.scrollToBottom()
             return
         self.net.send({"type": "chat", "message": text})
@@ -629,7 +851,7 @@ class SyncMPVWindow(QWidget):
             self.chat_list.addItem(f"{msg.get('from')}: {msg.get('message')}")
             self.chat_list.scrollToBottom()
         elif mtype == "error":
-            self.status_label.setText(f"Erreur: {msg.get('message', '')}")
+            self.status_label.setText(tr("status_error", message=msg.get('message', '')))
             self.net.close()
 
     def apply_remote_state(self, msg: dict):
@@ -701,6 +923,8 @@ class SyncMPVWindow(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    if os.path.exists(ICON_PATH):
+        app.setWindowIcon(QIcon(ICON_PATH))
     win = SyncMPVWindow()
     win.show()
     _apply_dark_titlebar(win)
