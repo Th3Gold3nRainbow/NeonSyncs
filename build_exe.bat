@@ -54,7 +54,7 @@ set MISSING=0
 if not exist mpv-2.dll (
     echo ATTENTION: mpv-2.dll est introuvable dans ce dossier.
     echo Le programme ne fonctionnera pas sans elle.
-    echo Telechargez libmpv pour Windows, voir README_WINDOWS.md
+    echo Telechargez libmpv pour Windows, voir docs/building-windows.md
     set MISSING=1
 )
 

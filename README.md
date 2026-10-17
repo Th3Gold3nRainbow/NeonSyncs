@@ -16,7 +16,7 @@ Official website: https://neonsyncs.com
 
 - Peer-to-peer rooms with generated short IDs (for example `neonsyncs-xxxxxx`).
 - Optional room password protection for private watch sessions.
-- Host relay mesh topology supporting watchparties with more than two participants.
+- Host-relayed star topology supporting watchparties with more than two participants.
 - Clock synchronization using ping latency estimation and scheduled playback actions.
 - Playback drift correction with jump thresholds and cooldown intervals.
 - Embedded mpv video player without external playback windows.
@@ -45,7 +45,7 @@ To uninstall NeonSyncs, use Windows Settings > Apps > Installed apps, or Control
 
 ### Peer-to-Peer Mode (Default)
 
-1. Open a local video file by clicking Open a file (or press Ctrl+O). Both you and your participants must have the identical video file saved locally.
+1. Open a local video file by clicking Open a file. Both you and your participants must have the identical video file saved locally.
 2. Select P2P (recommended) from the Mode dropdown.
 3. Set your username and an optional room password.
 4. If hosting: click Create Room. Copy the generated Room ID and send it to your participants.
@@ -91,6 +91,9 @@ WebRTC peer-to-peer connections require signaling and network traversal. By defa
 User preferences, including the active language selection and installer state, are saved in `%APPDATA%\NeonSyncs\settings.json`.
 
 ## Building from Source
+
+For detailed Windows build and packaging instructions, see [docs/building-windows.md](docs/building-windows.md).
+For internationalization and language priority architecture, see [docs/localization.md](docs/localization.md).
 
 ### Prerequisites
 
