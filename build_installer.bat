@@ -15,8 +15,8 @@ if not exist %ISCC% (
     exit /b 1
 )
 
-if not exist dist\SyncMPV.exe (
-    echo ERREUR: dist\SyncMPV.exe est introuvable.
+if not exist dist\NeonSyncs.exe (
+    echo ERREUR: dist\NeonSyncs.exe est introuvable.
     echo Executez d'abord build_exe.bat
     pause
     exit /b 1
@@ -25,5 +25,5 @@ if not exist dist\SyncMPV.exe (
 %ISCC% installer.iss
 
 echo.
-echo Installeur genere dans Output\SyncMPV-Setup.exe
+echo Installeur genere dans Output\NeonSyncs-Setup.exe
 pause

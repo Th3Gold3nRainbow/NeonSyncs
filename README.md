@@ -1,20 +1,22 @@
-# SyncMPV
+# NeonSyncs
 
 Watch videos in perfect sync with friends anywhere — built-in mpv player, real-time peer-to-peer playback sync, text chat, and fullscreen. No port forwarding, no server hosting, and no external player windows.
 
-SyncMPV supports modern **serverless Peer-to-Peer (WebRTC)** mode by default, while retaining the classic Python asyncio server mode for dedicated or local network setups.
+Official website: **[https://neonsyncs.com](https://neonsyncs.com)**
+
+NeonSyncs supports modern **serverless Peer-to-Peer (WebRTC)** mode by default, while retaining the classic Python asyncio server mode for dedicated or local network setups.
 
 ---
 
 ## Download
 
-Windows users: grab the latest installer from the **[Releases page](https://github.com/Th3Gold3nRainbow/SyncMPV/releases)** — no Python setup needed.
+Windows users: grab the latest installer from the **[Releases page](https://github.com/Th3Gold3nRainbow/SyncMPV/releases)** or via **[neonsyncs.com](https://neonsyncs.com)** — no Python setup needed.
 
 ---
 
 ## Key Features
 
-- **Peer-to-Peer (P2P) by default**: Create a room, share the generated Room ID (`syncmpv-xxxxxx`), and connect directly without port forwarding, dynamic DNS, or self-hosting a server.
+- **Peer-to-Peer (P2P) by default**: Create a room, share the generated Room ID (`neonsyncs-xxxxxx`), and connect directly without port forwarding, dynamic DNS, or self-hosting a server.
 - **Microsecond Clock Synchronization**: NTP-style clock sync at handshake (5 pings, lowest RTT measurement, re-synced every 30s) to align system clocks across different computers.
 - **Scheduled Actions**: Play, pause, and seek actions are scheduled with a 500 ms execution window (`executeAt = hostNow + 500ms`) so all clients trigger seek and playback at the exact same physical instant.
 - **Smart Drift Correction**: Dynamic playback speed adjustment (between 0.97× and 1.03×) for sub-second drift (< 1s) to eliminate stutter and audio cuts. Automatic seek catch-up for larger desyncs (≥ 1s).
@@ -22,7 +24,7 @@ Windows users: grab the latest installer from the **[Releases page](https://gith
 - **Classic Server Mode**: Switch anytime to centralized `server.py` mode for LAN parties or dedicated VPS hosting.
 - **Embedded mpv Player**: Direct libmpv integration (no separate external window to manage).
 - **Rich Controls**: Progress bar seeking, fast forward/rewind buttons (⏪10s/30s, 10s/30s⏩), keyboard arrow shortcuts (←/→ ±10s, ↑/↓ ±60s), Spacebar toggle, and Fullscreen (`F` / `F11` / double-click).
-- **Integrated Chat & Dark Neon Theme**: Built-in side-panel chat, user list, and French / English localization.
+- **Integrated Chat & Dark Neon Theme**: Built-in side-panel chat, user list, Orbitron/Rajdhani cyberpunk styling, and French / English localization.
 
 ---
 
@@ -30,16 +32,16 @@ Windows users: grab the latest installer from the **[Releases page](https://gith
 
 No port forwarding or server hosting required!
 
-1. **Launch SyncMPV**.
+1. **Launch NeonSyncs**.
 2. **Host a room**:
    - Keep the mode on **P2P (recommended)**.
    - Enter your username and optional password.
    - Click **Create Room**.
-   - Click **Copy** to copy your unique Room ID (e.g. `syncmpv-a3b7k9`).
+   - Click **Copy** to copy your unique Room ID (e.g. `neonsyncs-a3b7k9`).
 3. **Join a room**:
    - Guests enter their username, paste the Room ID into the **Room ID** field, and click **Join**.
 4. **Open a video**:
-   - Each participant clicks **Open a file…** to select their local video file (SyncMPV synchronizes playback control, not the video file stream itself).
+   - Each participant clicks **Open a file…** to select their local video file (NeonSyncs synchronizes playback control, not the video file stream itself).
    - Play, pause, and seeks are synchronized automatically in real time!
 
 ---
@@ -58,7 +60,7 @@ python server.py --host 0.0.0.0 --port 8999 --password yourpassword
 
 ### 2. Connect clients
 
-In SyncMPV, switch the dropdown to **Server**, enter the server IP/Port and room name, then click **Connect**.
+In NeonSyncs, switch the dropdown to **Server**, enter the server IP/Port and room name, then click **Connect**.
 
 ---
 
@@ -107,7 +109,7 @@ python client.py
 ```
 
 ### Windows Executable & Installer
-Run `build_exe.bat` to compile `dist\SyncMPV.exe` using PyInstaller, then compile `installer.iss` with Inno Setup to generate `Output\SyncMPV-Setup.exe`.
+Run `build_exe.bat` to compile `dist\NeonSyncs.exe` using PyInstaller, then compile `installer.iss` with Inno Setup to generate `Output\NeonSyncs-Setup.exe`.
 
 ---
 

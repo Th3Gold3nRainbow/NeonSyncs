@@ -92,6 +92,18 @@ if not exist p2p\peerjs.min.js (
     set MISSING=1
 )
 
+if not exist assets\fonts\Orbitron-Bold.ttf (
+    echo ATTENTION: assets\fonts\Orbitron-Bold.ttf est introuvable.
+    echo L'application utilisera la police systeme par defaut.
+    set MISSING=1
+)
+
+if not exist assets\fonts\Rajdhani-Medium.ttf (
+    echo ATTENTION: assets\fonts\Rajdhani-Medium.ttf est introuvable.
+    echo L'application utilisera la police systeme par defaut.
+    set MISSING=1
+)
+
 if "%MISSING%"=="1" (
     echo.
     echo Vous pouvez continuer sans ces fichiers, mais le resultat sera incomplet.
@@ -104,9 +116,11 @@ echo.
 echo [5/5] Compilation avec PyInstaller...
 set "PYQT5_DIR=venv\Lib\site-packages\PyQt5"
 
-pyinstaller --noconfirm --onefile --windowed --name SyncMPV --icon icon.ico ^
+pyinstaller --noconfirm --onefile --windowed --name NeonSyncs --icon icon.ico ^
     --add-binary "mpv-2.dll;." ^
     --add-data "p2p;p2p" ^
+    --add-data "assets;assets" ^
+    --add-data "brand;brand" ^
     --add-binary "%PYQT5_DIR%\Qt5\bin\QtWebEngineProcess.exe;PyQt5\Qt5\bin" ^
     --add-data "%PYQT5_DIR%\Qt5\resources;PyQt5\Qt5\resources" ^
     --add-data "%PYQT5_DIR%\Qt5\translations\qtwebengine_locales;PyQt5\Qt5\translations\qtwebengine_locales" ^
@@ -126,7 +140,7 @@ if exist icon.ico copy /y icon.ico dist\icon.ico >nul
 
 echo.
 echo ============================================================
-echo Termine ! L'executable se trouve dans dist\SyncMPV.exe
+echo Termine ! L'executable se trouve dans dist\NeonSyncs.exe
 echo Vous pouvez maintenant lancer build_installer.bat (Inno Setup)
 echo pour generer un vrai installeur Windows.
 echo ============================================================

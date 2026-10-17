@@ -1,9 +1,9 @@
 ; ============================================================
 ;  installer.iss — script Inno Setup
-;  Genere un installeur Windows classique (setup.exe) pour SyncMPV.
+;  Genere un installeur Windows classique (setup.exe) pour NeonSyncs.
 ;
 ;  Pre-requis :
-;    1. Avoir deja execute build_exe.bat (dist\SyncMPV.exe doit exister)
+;    1. Avoir deja execute build_exe.bat (dist\NeonSyncs.exe doit exister)
 ;    2. Installer Inno Setup : https://jrsoftware.org/isdl.php
 ;    3. Placer icon.ico, wizard-image.bmp et wizard-small-image.bmp
 ;       dans le MEME dossier que ce fichier .iss (fournis avec le projet)
@@ -12,28 +12,32 @@
 ;
 ;  L'installeur propose maintenant un choix de langue (Anglais / Francais)
 ;  des le lancement de setup.exe, et affiche un logo moderne (icone +
-;  bandeau lateral) genere pour SyncMPV.
+;  bandeau lateral) genere pour NeonSyncs.
 ;
-;  Le resultat (Output\SyncMPV-Setup.exe) est l'installeur final
+;  Le resultat (Output\NeonSyncs-Setup.exe) est l'installeur final
 ;  a distribuer : double-clic -> installation -> raccourcis ->
 ;  desinstallation propre via le Panneau de configuration.
 ; ============================================================
 
-#define MyAppName "SyncMPV"
-#define MyAppVersion "1.0.1"
+#define MyAppName "NeonSyncs"
+#define MyAppVersion "2.1.0"
 #define MyAppPublisher "Th3Gold3nRainbow"
-#define MyAppExeName "SyncMPV.exe"
+#define MyAppURL "https://neonsyncs.com"
+#define MyAppExeName "NeonSyncs.exe"
 
 [Setup]
 AppId={{B6E3C6C1-9B7A-4F1E-8B6E-SYNCMPV00001}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
-OutputBaseFilename=SyncMPV-Setup
+OutputBaseFilename=NeonSyncs-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -52,7 +56,7 @@ Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-Source: "dist\SyncMPV.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\NeonSyncs.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; La DLL mpv est deja embarquee dans l'exe via --add-binary,
 ; mais si vous ne l'avez pas embarquee, decommentez la ligne suivante :

@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>SyncMPV P2P</title>
+    <title>NeonSyncs P2P</title>
     <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
     <script src="peerjs.min.js"></script>
 </head>
@@ -13,7 +13,7 @@
 
     // Alphabet for room IDs: no ambiguous chars (no 0/o, 1/l/i)
     var ROOM_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
-    var ROOM_PREFIX = "syncmpv-";
+    var ROOM_PREFIX = "neonsyncs-";
 
     function generateRoomId() {
         var code = "";
@@ -351,7 +351,7 @@
             state.myUsername = username || "Invite";
             state.myPassword = password || "";
 
-            // Normalize room ID: lowercase, ensure syncmpv- prefix
+            // Normalize room ID: lowercase, ensure neonsyncs- prefix
             var cleanId = (roomId || "").trim().toLowerCase();
             if (cleanId && cleanId.indexOf(ROOM_PREFIX) !== 0) {
                 cleanId = ROOM_PREFIX + cleanId;

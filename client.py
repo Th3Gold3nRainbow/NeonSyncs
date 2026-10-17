@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SyncMPV Client
-==============
+NeonSyncs Client
+================
 Client de lecture synchronisée avec lecteur MPV intégré dans la fenêtre
 (via python-mpv / libmpv, pas de fenêtre externe comme le fait
 Syncplay avec MPC/VLC).
@@ -78,14 +78,14 @@ import mpv
 
 
 # ---------------------------------------------------------------------------
-# Internationalisation — la langue choisie a l'installation (ecrite par
-# l'installateur Inno Setup dans "lang.txt", a cote de l'executable) est
-# lue ici. Par defaut : francais si le fichier est absent (ex: lancement
-# depuis les sources sans passer par l'installateur).
+# Identité de l'application & Internationalisation
 # ---------------------------------------------------------------------------
+APP_NAME = "NeonSyncs"
+APP_URL = "https://neonsyncs.com"
+
 STRINGS = {
     "fr": {
-        "window_title": "SyncMPV — lecture synchronisée",
+        "window_title": f"{APP_NAME} — lecture synchronisée",
         "open_file": "Ouvrir un fichier…",
         "back_30": "⏪ 30s",
         "back_10": "⏪ 10s",
@@ -116,7 +116,7 @@ STRINGS = {
         "create_room": "Créer un salon",
         "join_room": "Rejoindre",
         "room_id": "ID du salon",
-        "room_id_placeholder": "ex: syncmpv-xxxxxx",
+        "room_id_placeholder": "ex: neonsyncs-xxxxxx",
         "copy_id": "Copier",
         "id_copied": "Copié !",
         "status_reconnecting": "Reconnexion…",
@@ -136,7 +136,7 @@ STRINGS = {
         "warning_different_file": "Fichier différent de l'hôte ({details}) — synchronisation suspendue.",
     },
     "en": {
-        "window_title": "SyncMPV — synchronized playback",
+        "window_title": f"{APP_NAME} — synchronized playback",
         "open_file": "Open a file…",
         "back_30": "⏪ 30s",
         "back_10": "⏪ 10s",
@@ -167,7 +167,7 @@ STRINGS = {
         "create_room": "Create Room",
         "join_room": "Join",
         "room_id": "Room ID",
-        "room_id_placeholder": "e.g. syncmpv-xxxxxx",
+        "room_id_placeholder": "e.g. neonsyncs-xxxxxx",
         "copy_id": "Copy",
         "id_copied": "Copied!",
         "status_reconnecting": "Reconnecting…",
@@ -358,6 +358,17 @@ QLabel[role="brand"] {{
     font-size: 13pt;
     font-weight: 900;
     letter-spacing: 1.5px;
+}}
+QLabel[role="website_link"] {{
+    font-family: {THEME['font_display']};
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding-top: 6px;
+    color: {THEME['text_muted']};
+}}
+QLabel[role="website_link"]:hover {{
+    color: {THEME['accent_primary']};
 }}
 QLabel[role="status"] {{
     color: {THEME['text_primary']};
@@ -891,7 +902,7 @@ class P2PClient(QObject):
             self.disconnected_signal.emit()
 
 
-class SyncMPVWindow(QWidget):
+class NeonSyncsWindow(QWidget):
     fs_toggle_requested = pyqtSignal()
     fs_exit_requested = pyqtSignal()
     seek_requested = pyqtSignal(float)
@@ -1233,6 +1244,15 @@ class SyncMPVWindow(QWidget):
         chat_row.addWidget(self.chat_input)
         chat_row.addWidget(btn_send)
         right.addLayout(chat_row)
+
+        # Lien discret vers le site officiel https://neonsyncs.com
+        c_muted = THEME["text_muted"]
+        lbl_site = QLabel(f'<a href="{APP_URL}" style="color:{c_muted}; text-decoration:none;">neonsyncs.com</a>')
+        lbl_site.setOpenExternalLinks(True)
+        lbl_site.setAlignment(Qt.AlignCenter)
+        lbl_site.setCursor(Qt.PointingHandCursor)
+        lbl_site.setProperty("role", "website_link")
+        right.addWidget(lbl_site)
 
         root.addWidget(self.right_panel, stretch=0)
 
@@ -1855,13 +1875,16 @@ class SyncMPVWindow(QWidget):
         event.accept()
 
 
+SyncMPVWindow = NeonSyncsWindow
+
+
 def main():
     app = QApplication(sys.argv)
     load_application_fonts()
     app.setStyleSheet(STYLE_SHEET)
     if os.path.exists(ICON_PATH):
         app.setWindowIcon(QIcon(ICON_PATH))
-    win = SyncMPVWindow()
+    win = NeonSyncsWindow()
     win.show()
     _apply_dark_titlebar(win)
     sys.exit(app.exec_())

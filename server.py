@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-SyncMPV Server
-==============
+NeonSyncs Server
+================
 Serveur de synchronisation de lecture vidéo, inspiré de Syncplay.
 Les clients se connectent, rejoignent une "room", et le serveur
 rediffuse l'état de lecture (pause/lecture, position, fichier) à
@@ -35,7 +35,7 @@ import argparse
 import logging
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("syncmpv-server")
+log = logging.getLogger("neonsyncs-server")
 
 
 class Client:
@@ -194,7 +194,7 @@ class SyncServer:
 
 
 async def main():
-    parser = argparse.ArgumentParser(description="Serveur SyncMPV")
+    parser = argparse.ArgumentParser(description="Serveur NeonSyncs")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8999)
     parser.add_argument("--password", default=None,
@@ -205,7 +205,7 @@ async def main():
 
     server_logic = SyncServer(password=args.password)
     server = await asyncio.start_server(server_logic.handle_client, args.host, args.port)
-    log.info(f"Serveur SyncMPV en écoute sur {args.host}:{args.port}")
+    log.info(f"Serveur NeonSyncs en écoute sur {args.host}:{args.port}")
     if args.password:
         log.info("Mot de passe active.")
     async with server:

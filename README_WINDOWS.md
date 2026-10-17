@@ -1,8 +1,10 @@
 # Building the Windows installer (.exe)
 
 This folder contains everything needed to turn `client.py` into a real,
-double-clickable Windows installer. **These scripts must be run on a
+double-clickable Windows installer for **NeonSyncs**. **These scripts must be run on a
 Windows machine** (PyInstaller doesn't cross-compile from Linux/Mac).
+
+Official website: **https://neonsyncs.com**
 
 ## Steps
 
@@ -22,10 +24,10 @@ looking for if you need to adjust).
 Double-click `build_exe.bat` (or run it from a terminal). It will:
 - create a Python virtual environment,
 - install dependencies (`PyQt5`, `python-mpv`, `pyinstaller`),
-- produce `dist\SyncMPV.exe`, a standalone executable (the mpv DLL is
-  bundled inside it).
+- produce `dist\NeonSyncs.exe`, a standalone executable (the mpv DLL and
+  WebEngine/assets are bundled inside it).
 
-You can already distribute `dist\SyncMPV.exe` as-is — it works without
+You can already distribute `dist\NeonSyncs.exe` as-is — it works without
 installation, portable-style.
 
 ### 3. (Optional but recommended) Build a real installer
@@ -35,11 +37,11 @@ uninstall through Control Panel:
 
 1. Install **Inno Setup**: https://jrsoftware.org/isdl.php
 2. Make sure `icon.ico`, `wizard-image.bmp` and `wizard-small-image.bmp`
-   (included with the project — the SyncMPV logo) are in the same
+   (included with the project — the NeonSyncs logo) are in the same
    folder as `installer.iss`.
 3. Run `build_installer.bat`, or open `installer.iss` directly in Inno
    Setup Compiler and hit *Build > Compile*.
-4. Result: `Output\SyncMPV-Setup.exe` — that's the file to distribute
+4. Result: `Output\NeonSyncs-Setup.exe` — that's the file to distribute
    to users.
 
 The installer shows a language picker (English / French) right at
@@ -48,8 +50,8 @@ launch, and a custom logo (icon + side banner).
 ## Overall flow
 
 ```
-client.py  --(PyInstaller, build_exe.bat)-->  dist\SyncMPV.exe
-dist\SyncMPV.exe  --(Inno Setup, build_installer.bat)-->  Output\SyncMPV-Setup.exe
+client.py  --(PyInstaller, build_exe.bat)-->  dist\NeonSyncs.exe
+dist\NeonSyncs.exe  --(Inno Setup, build_installer.bat)-->  Output\NeonSyncs-Setup.exe
 ```
 
 ## The server (`server.py`) doesn't need packaging
