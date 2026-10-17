@@ -588,17 +588,46 @@ def _apply_dark_titlebar(widget):
         return
     try:
         import ctypes
+        import ctypes.wintypes
+
         hwnd = int(widget.winId())
+        dwm = ctypes.windll.dwmapi
+        dwm.DwmSetWindowAttribute.argtypes = [
+            ctypes.wintypes.HWND,
+            ctypes.wintypes.DWORD,
+            ctypes.c_void_p,
+            ctypes.wintypes.DWORD,
+        ]
+        dwm.DwmSetWindowAttribute.restype = ctypes.c_long
+
         value = ctypes.c_int(1)
-        for attr in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (20 = Win10 20H1+, 19 = versions plus anciennes)
-            ctypes.windll.dwmapi.DwmSetWindowAttribute(
+        for attr in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (20 = Win10 20H1+ / Win11, 19 = versions antérieures)
+            res = dwm.DwmSetWindowAttribute(
                 hwnd, attr, ctypes.byref(value), ctypes.sizeof(value)
             )
-        # Windows 11 DWMWA_CAPTION_COLOR (35) : fond sombre néon #08070d (COLORREF 0x000d0708)
-        caption_color = ctypes.c_int(0x000d0708)
-        ctypes.windll.dwmapi.DwmSetWindowAttribute(
-            hwnd, 35, ctypes.byref(caption_color), ctypes.sizeof(caption_color)
-        )
+            if res == 0:
+                break
+
+        # Redessin forcé de la zone non cliente pour corriger le rendu initial de la barre de titre
+        SWP_NOSIZE = 0x0001
+        SWP_NOMOVE = 0x0002
+        SWP_NOZORDER = 0x0004
+        SWP_NOACTIVATE = 0x0010
+        SWP_FRAMECHANGED = 0x0020
+        flags = SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
+
+        user32 = ctypes.windll.user32
+        user32.SetWindowPos.argtypes = [
+            ctypes.wintypes.HWND,
+            ctypes.wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.wintypes.UINT,
+        ]
+        user32.SetWindowPos.restype = ctypes.wintypes.BOOL
+        user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, flags)
     except Exception:
         pass
 
@@ -1885,8 +1914,11 @@ def main():
     if os.path.exists(ICON_PATH):
         app.setWindowIcon(QIcon(ICON_PATH))
     win = NeonSyncsWindow()
-    win.show()
+    win.winId()
     _apply_dark_titlebar(win)
+    win.show()
+    QTimer.singleShot(0, lambda: _apply_dark_titlebar(win))
+    QTimer.singleShot(150, lambda: _apply_dark_titlebar(win))
     sys.exit(app.exec_())
 
 
