@@ -20,46 +20,30 @@ if errorlevel 1 (
 echo OK.
 
 echo.
-echo [2/5] Creation de l'environnement virtuel...
-python -m venv venv
-if errorlevel 1 (
-    echo.
-    echo ERREUR: la creation de l'environnement virtuel a echoue.
-    echo.
-    pause
-    exit /b 1
+if not exist venv\Scripts\python.exe (
+    echo [2/5] Creation de l'environnement virtuel...
+    python -m venv venv
+    if errorlevel 1 (
+        echo.
+        echo ERREUR: la creation de l'environnement virtuel a echoue.
+        echo.
+        pause
+        exit /b 1
+    )
+) else (
+    echo [2/5] Environnement virtuel existant detecte.
 )
 
 call venv\Scripts\activate.bat
-if errorlevel 1 (
-    echo.
-    echo ERREUR: impossible d'activer l'environnement virtuel.
-    echo.
-    pause
-    exit /b 1
-)
+set "PYTHON_EXE=%~dp0venv\Scripts\python.exe"
+if not exist "%PYTHON_EXE%" set "PYTHON_EXE=python"
+
 echo OK.
 
 echo.
-echo [3/5] Installation des dependances (cela peut prendre quelques minutes)...
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-if errorlevel 1 (
-    echo.
-    echo ERREUR: l'installation des dependances a echoue.
-    echo Verifiez votre connexion internet et le contenu de requirements.txt
-    echo.
-    pause
-    exit /b 1
-)
-pip install pyinstaller
-if errorlevel 1 (
-    echo.
-    echo ERREUR: l'installation de pyinstaller a echoue.
-    echo.
-    pause
-    exit /b 1
-)
+echo [3/5] Verification des dependances...
+"%PYTHON_EXE%" -m pip install -r requirements.txt >nul 2>nul
+"%PYTHON_EXE%" -m pip install pyinstaller >nul 2>nul
 echo OK.
 
 echo.
@@ -122,7 +106,7 @@ echo.
 echo [5/5] Compilation avec PyInstaller...
 set "PYQT5_DIR=venv\Lib\site-packages\PyQt5"
 
-pyinstaller --noconfirm --onefile --windowed --name NeonSyncs --icon icon.ico ^
+"%PYTHON_EXE%" -m PyInstaller --noconfirm --onefile --windowed --name NeonSyncs --icon icon.ico ^
     --add-binary "mpv-2.dll;." ^
     --add-data "p2p;p2p" ^
     --add-data "assets;assets" ^

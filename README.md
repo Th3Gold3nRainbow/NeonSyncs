@@ -1,155 +1,162 @@
 # NeonSyncs
 
-Watch videos in perfect sync with friends anywhere — built-in mpv player, real-time peer-to-peer playback sync, text chat, and fullscreen. No port forwarding, no server hosting, and no external player windows.
+NeonSyncs is a Windows desktop application for watching local video files in sync with other people. It embeds mpv, connects participants peer-to-peer and keeps playback aligned across clients.
 
-Official website: **[https://neonsyncs.com](https://neonsyncs.com)**
+![NeonSyncs interface](docs/images/main-window.png)
 
-NeonSyncs supports modern **serverless Peer-to-Peer (WebRTC)** mode by default, while retaining the classic Python asyncio server mode for dedicated or local network setups.
+## Overview
 
----
+NeonSyncs allows two or more people to watch the same local video file together over the Internet. It synchronizes playback state, pause, and seek actions so that all participants stay aligned.
 
-## Download
+The application includes an embedded video player powered by libmpv, a peer-to-peer networking layer using WebRTC and PeerJS, an integrated chat panel, and a legacy client-server mode.
 
-Windows users: grab the latest installer from the **[Releases page](https://github.com/Th3Gold3nRainbow/SyncMPV/releases)** or via **[neonsyncs.com](https://neonsyncs.com)** — no Python setup needed.
+Official website: https://neonsyncs.com
 
----
+## Features
 
-## Key Features
+- Peer-to-peer rooms with generated short IDs (for example `neonsyncs-xxxxxx`).
+- Optional room password protection for private watch sessions.
+- Host relay mesh topology supporting watchparties with more than two participants.
+- Clock synchronization using ping latency estimation and scheduled playback actions.
+- Playback drift correction with jump thresholds and cooldown intervals.
+- Embedded mpv video player without external playback windows.
+- Seekable progress bar reflecting current playback position and total duration.
+- Jump controls with dedicated 10s and 30s buttons, plus keyboard arrow shortcuts.
+- Fullscreen mode (F, F11, or double-click) that hides all side panels and controls.
+- Integrated text chat and participant user list.
+- Warning banner when participants load video files with differing names or durations.
+- Four interface languages: English, French, Russian, and Arabic with Right-To-Left layout and live in-app switching without reconnecting.
+- Windows installer available in all four languages with clean desktop shortcuts.
+- Legacy client-server mode (`server.py`) over TCP sockets with password support.
+- Custom STUN and TURN server configuration via `p2p/ice_servers.json`.
 
-- **Peer-to-Peer (P2P) by default**: Create a room, share the generated Room ID (`neonsyncs-xxxxxx`), and connect directly without port forwarding, dynamic DNS, or self-hosting a server.
-- **Microsecond Clock Synchronization**: NTP-style clock sync at handshake (5 pings, lowest RTT measurement, re-synced every 30s) to align system clocks across different computers.
-- **Scheduled Actions**: Play, pause, and seek actions are scheduled with a 500 ms execution window (`executeAt = hostNow + 500ms`) so all clients trigger seek and playback at the exact same physical instant.
-- **Smart Drift Correction**: Dynamic playback speed adjustment (between 0.97× and 1.03×) for sub-second drift (< 1s) to eliminate stutter and audio cuts. Automatic seek catch-up for larger desyncs (≥ 1s).
-- **Different File Protection**: Alerts participants in the chat if a guest opens a different video file or version (different filename or duration difference > 2s) instead of corrupting playback positions.
-- **Classic Server Mode**: Switch anytime to centralized `server.py` mode for LAN parties or dedicated VPS hosting.
-- **Embedded mpv Player**: Direct libmpv integration (no separate external window to manage).
-- **Rich Controls**: Progress bar seeking, fast forward/rewind buttons (⏪10s/30s, 10s/30s⏩), keyboard arrow shortcuts (←/→ ±10s, ↑/↓ ±60s), Spacebar toggle, and Fullscreen (`F` / `F11` / double-click).
-- **Integrated Chat & Dark Neon Theme**: Built-in side-panel chat, user list, Orbitron/Rajdhani cyberpunk styling, and bidirectional Unicode chat isolation.
-- **Full Internationalization (4 Languages)**: Fully localized in **English**, **Français**, **Русский**, and **العربية** (native RTL layout with zero font tofu across all scripts).
+## Installation
 
----
+Pre-built Windows installers are published on the [Releases page](https://github.com/Th3Gold3nRainbow/NeonSyncs/releases).
 
-## Quick Start (P2P Mode — Recommended)
+1. Download `NeonSyncs-Setup.exe` from the latest release.
+2. Run the installer and choose your language: English, Français, Русский, or العربية.
+3. Follow the setup wizard to complete installation.
+4. Launch NeonSyncs from your Start Menu or Desktop shortcut.
 
-No port forwarding or server hosting required!
+To uninstall NeonSyncs, use Windows Settings > Apps > Installed apps, or Control Panel > Programs and Features. The uninstaller offers an option to remove user settings stored in `%APPDATA%\NeonSyncs`.
 
-1. **Launch NeonSyncs**.
-2. **Host a room**:
-   - Keep the mode on **P2P (recommended)**.
-   - Enter your username and optional password.
-   - Click **Create Room**.
-   - Click **Copy** to copy your unique Room ID (e.g. `neonsyncs-a3b7k9`).
-3. **Join a room**:
-   - Guests enter their username, paste the Room ID into the **Room ID** field, and click **Join**.
-4. **Open a video**:
-   - Each participant clicks **Open a file…** to select their local video file (NeonSyncs synchronizes playback control, not the video file stream itself).
-   - Play, pause, and seeks are synchronized automatically in real time!
+## Usage
 
----
+### Peer-to-Peer Mode (Default)
 
-## Server Mode (Optional)
+1. Open a local video file by clicking Open a file (or press Ctrl+O). Both you and your participants must have the identical video file saved locally.
+2. Select P2P (recommended) from the Mode dropdown.
+3. Set your username and an optional room password.
+4. If hosting: click Create Room. Copy the generated Room ID and send it to your participants.
+5. If joining: paste the Room ID into the Room ID field and click Join.
+6. Play, pause, and seek actions are automatically shared across all connected clients.
 
-If you prefer self-hosting a dedicated central server (e.g., on a local LAN or private VPS):
+### Legacy Server Mode
 
-### 1. Run the server
+For environments where peer-to-peer connections cannot be established, you can run the standalone Python server:
 
-```bash
-python server.py --host 0.0.0.0 --port 8999
-# Or with an optional password:
-python server.py --host 0.0.0.0 --port 8999 --password yourpassword
+```cmd
+python server.py --port 8999 --password secret
 ```
 
-### 2. Connect clients
+In the NeonSyncs application:
+1. Select Server in the Mode dropdown.
+2. Enter the server Host IP, Port, Room name, and Password.
+3. Click Connect.
 
-In NeonSyncs, switch the dropdown to **Server**, enter the server IP/Port and room name, then click **Connect**.
+## Configuration
 
----
+### STUN and TURN Relays
 
-## How Synchronization Works
+WebRTC peer-to-peer connections require signaling and network traversal. By default, NeonSyncs uses public Google STUN servers. If your network is behind a symmetric NAT or restrictive firewall, configure a TURN relay server in `p2p/ice_servers.json`:
 
-1. **Handshake & Clock Sync**:
-   Upon joining, the guest exchanges 5 sequential pings with the host to determine the exact round-trip time (RTT) and time offset:
-   $$\text{offset} = \text{hostTime} - \left(t_0 + \frac{\text{RTT}}{2}\right)$$
-   The offset with the lowest RTT is retained, and refreshed every 30 seconds.
+```json
+{
+  "iceServers": [
+    {
+      "urls": "stun:stun.l.google.com:19302"
+    },
+    {
+      "urls": "turn:turn.example.com:3478",
+      "username": "user",
+      "credential": "password"
+    }
+  ]
+}
+```
 
-2. **Scheduled Actions**:
-   When any participant interacts with the player (Play/Pause button, Spacebar, progress bar slider, ±10/30s buttons, or keyboard arrows), a request is routed to the host, which timestamps the action at $t = \text{hostNow} + 500\text{ ms}$. Each peer converts this timestamp using their clock offset and schedules execution via high-precision timers.
+### Application Settings
 
-3. **Continuous Drift Adjustment**:
-   The host broadcasts its state periodically every 3 seconds. Guests compute the theoretical playback position:
-   $$\text{theo\_pos} = \text{targetTime} + (\text{now}_{\text{host}} - \text{executeAt})$$
-   - **Gap < 0.05 s**: Normal 1.0× speed.
-   - **0.05 s ≤ Gap < 1.0 s**: Smooth speed adjustment ($0.97\times$ to $1.03\times$) without seeking or audio glitches.
-   - **Gap ≥ 1.0 s**: Instant seek to the theoretical position with anti-echo and anti-bounce protections.
-
----
-
-## Known Limitations & Technical Details
-
-- **PeerJS Cloud Signaling**: The P2P mode utilizes the public PeerJS Cloud signaling server exclusively for the initial WebRTC connection handshake (exchanging SDP offer/answers). Once connected, video control data channels flow directly peer-to-peer; no media or chat is routed through third-party servers.
-- **Symmetric NATs & TURN**: P2P connections use standard STUN servers (Google STUN). In rare restricted network environments (such as certain strict corporate/university firewalls or symmetric NATs), direct P2P connections may fail without a relay (TURN) server. In this case, an explicit error is displayed and the classic Server mode can be used as a fallback.
-- **Installer Size**: The Windows installer is larger (~150 MB+) because it embeds both `libmpv` (video decoding engine) and `PyQtWebEngine` (Chromium runtime required for the headless WebRTC PeerJS stack).
-
----
-
-## Multi-Language Support (i18n)
-
-NeonSyncs is fully internationalized across **4 languages**:
-- **English** (`en`)
-- **Français** (`fr`)
-- **Русский** (`ru`)
-- **العربية** (`ar`, with native Right-To-Left layout and proper bidirectional Unicode isolation)
-
-### Changing Language
-1. **In-App Hot Switch**: Click the language dropdown located directly in the application header. The interface switches instantly without restarting or disconnecting ongoing P2P watchparties.
-2. **Persistent Settings**: The application saves your preference to `%APPDATA%\NeonSyncs\settings.json`.
-3. **Installer Language**: Selected during installation in the Inno Setup language dialog (or via `/LANG=...`). The installer writes `{app}\lang.txt` (read-only for the app).
-4. **Priority Order on Startup**:
-   - **a.** User selection in `settings.json` (unless the installer was re-run since);
-   - **b.** Installer language from `lang.txt` (if installer was re-run with another language, it takes precedence and resets manual choice);
-   - **c.** Operating system locale (`QLocale.system()`);
-   - **d.** Fallback to English.
-
----
+User preferences, including the active language selection and installer state, are saved in `%APPDATA%\NeonSyncs\settings.json`.
 
 ## Building from Source
 
-### Requirements
-- Python 3.8+
-- `libmpv` (e.g. `mpv-2.dll` on Windows, `libmpv2` on Debian/Ubuntu, `mpv` via Homebrew on macOS)
+### Prerequisites
 
-```bash
+- Windows 10 or Windows 11 (64-bit)
+- Python 3.10 or later
+- Git for Windows
+- Inno Setup 6 (optional, required only for building the installer)
+
+### Setup Steps
+
+1. Clone the repository:
+
+```cmd
+git clone https://github.com/Th3Gold3nRainbow/NeonSyncs.git
+cd NeonSyncs
+```
+
+2. Download `libmpv-2.dll` (64-bit Windows build) from [mpv-winbuild-cmake releases](https://github.com/shinchiro/mpv-winbuild-cmake/releases). Extract `libmpv-2.dll` into the repository root directory as `mpv-2.dll`.
+
+3. Create and activate a Python virtual environment:
+
+```cmd
 python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Linux/macOS:
-source venv/bin/activate
-
+call venv\Scripts\activate.bat
 pip install -r requirements.txt
-python client.py
+pip install pyinstaller
 ```
 
-### Validating Translations
-Run the i18n catalog and source linter:
-```bash
-python tools/check_i18n.py
+4. Build the standalone executable:
+
+```cmd
+build_exe.bat
 ```
 
-### Windows Executable & Installer
-To generate the production Windows binaries:
-1. **Compile the standalone executable**:
-   ```cmd
-   build_exe.bat
-   ```
-   Outputs `dist\NeonSyncs.exe` via PyInstaller (bundles `libmpv`, `PyQtWebEngine`, and translations).
-2. **Compile the installer**:
-   ```cmd
-   build_installer.bat
-   ```
-   Outputs `Output\NeonSyncs-Setup.exe` via Inno Setup 6 with full 4-language support, custom neon branded artwork, and uninstallation cleanup prompt for `%APPDATA%\NeonSyncs`.
+The compiled binary is generated at `dist\NeonSyncs.exe`.
 
----
+5. Build the Windows installer:
+
+```cmd
+build_installer.bat
+```
+
+The resulting setup executable is generated at `Output\NeonSyncs-Setup.exe`.
+
+## Architecture
+
+- **User interface**: Built with PyQt5, styled with a custom Cyber Cyan dark stylesheet and bundled typography (Orbitron and Rajdhani).
+- **Video engine**: Embedded libmpv window rendered inside a Qt QFrame using the native window identifier (`wid`).
+- **P2P signaling and data channels**: Powered by PeerJS running inside a hidden QWebEngineView instance, communicating with Python through a QWebChannel bridge.
+- **Synchronization protocol**: Host-relayed state broadcasting. When an action occurs (play, pause, or seek), the host schedules an execution timestamp (`executeAt`) adjusted for peer network latency.
+- **Internationalization**: Custom JSON catalog engine (`i18n.py`) supporting dynamic in-app switching, format interpolation, and bidirectional layout adjustments.
+
+## Known Limitations
+
+- All participants must have the identical video file locally. NeonSyncs synchronizes playback position and state; it does not stream video data over the network.
+- Peer discovery relies on the shared PeerJS Cloud signaling network.
+- Without a configured TURN server, direct peer connections may fail across certain strict NAT routers or corporate firewalls.
+- If the host leaves or closes the application, the peer-to-peer room closes.
+- The installer executable is not signed with a commercial Authenticode certificate. Windows SmartScreen may show an unknown publisher warning upon initial download.
+
+## Contributing
+
+Bug reports and contributions are welcome. Please open an issue on the GitHub repository using the bug report template, or submit a pull request with clear commit messages.
 
 ## License
 
-[MIT](LICENSE)
+The source code of NeonSyncs is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+Pre-compiled binary distributions bundle PyQt5, PyQtWebEngine, and libmpv, which are subject to the GNU General Public License version 3. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full licensing information.
