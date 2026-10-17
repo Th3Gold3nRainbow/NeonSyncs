@@ -44,7 +44,7 @@
   "error_wrong_password": "Неверный пароль",
   "host_left": "Хост покинул комнату",
   "p2p_error_signaling": "Сервер сигнализации недоступен",
-  "p2p_error_no_turn": "Сбой подключения (вероятно, NAT без TURN)",
+  "p2p_error_no_turn": "Сбой подключения (вероятно, строгий NAT без TURN)",
   "p2p_error_peer_unavailable": "Комната не найдена или хост отключился",
   "p2p_error_connection_failed": "Сбой подключения (тайм-аут или строгий NAT)",
   "p2p_error_room_id_generation": "Не удалось сгенерировать уникальный ID комнаты",
