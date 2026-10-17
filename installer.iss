@@ -1,27 +1,12 @@
-; ============================================================
-;  installer.iss — script Inno Setup
-;  Genere un installeur Windows classique (setup.exe) pour NeonSyncs.
-;
-;  Pre-requis :
-;    1. Avoir deja execute build_exe.bat (dist\NeonSyncs.exe doit exister)
-;    2. Installer Inno Setup : https://jrsoftware.org/isdl.php
-;    3. Placer icon.ico, wizard-image.bmp et wizard-small-image.bmp
-;       dans le MEME dossier que ce fichier .iss (fournis avec le projet)
-;    4. Ouvrir ce fichier avec Inno Setup Compiler, puis "Build > Compile"
-;       (ou en ligne de commande : ISCC.exe installer.iss)
-;
-;  L'installeur propose maintenant un choix de langue (Anglais / Francais)
-;  des le lancement de setup.exe, et affiche un logo moderne (icone +
-;  bandeau lateral) genere pour NeonSyncs.
-;
-;  Le resultat (Output\NeonSyncs-Setup.exe) est l'installeur final
-;  a distribuer : double-clic -> installation -> raccourcis ->
-;  desinstallation propre via le Panneau de configuration.
+﻿; ============================================================
+;  installer.iss — NeonSyncs Inno Setup Script
+;  Professional Windows installer for NeonSyncs with full i18n
+;  (English, French, Russian, Arabic RTL).
 ; ============================================================
 
 #define MyAppName "NeonSyncs"
-#define MyAppVersion "2.1.0"
-#define MyAppPublisher "Th3Gold3nRainbow"
+#define MyAppVersion "2.2.0"
+#define MyAppPublisher "NeonSyncs"
 #define MyAppURL "https://neonsyncs.com"
 #define MyAppExeName "NeonSyncs.exe"
 
@@ -38,7 +23,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
 OutputBaseFilename=NeonSyncs-Setup
-Compression=lzma
+Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -47,10 +32,42 @@ SetupIconFile=icon.ico
 WizardImageFile=wizard-image.bmp
 WizardSmallImageFile=wizard-small-image.bmp
 WizardImageStretch=no
+ShowLanguageDialog=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
+
+[CustomMessages]
+; --- English ---
+english.CreateDesktopIcon=Create a &desktop shortcut
+english.AdditionalIcons=Additional shortcuts:
+english.LaunchProgram=Launch {#MyAppName}
+english.AppRunningWarning={#MyAppName} is currently running. Please close the application before continuing.
+english.VisitWebsite=Visit {#MyAppName} official website
+
+; --- French ---
+french.CreateDesktopIcon=Créer un raccourci sur le &bureau
+french.AdditionalIcons=Raccourcis supplémentaires :
+french.LaunchProgram=Lancer {#MyAppName}
+french.AppRunningWarning={#MyAppName} est actuellement en cours d'exécution. Veuillez fermer l'application avant de continuer.
+french.VisitWebsite=Visiter le site officiel de {#MyAppName}
+
+; --- Russian ---
+russian.CreateDesktopIcon=Создать ярлык на &Рабочем столе
+russian.AdditionalIcons=Дополнительные ярлыки:
+russian.LaunchProgram=Запустить {#MyAppName}
+russian.AppRunningWarning=Приложение {#MyAppName} запущено. Пожалуйста, закройте его перед продолжением.
+russian.VisitWebsite=Посетить официальный сайт {#MyAppName}
+
+; --- Arabic ---
+arabic.CreateDesktopIcon=إنشاء اختصار على &سطح المكتب
+arabic.AdditionalIcons=اختصارات إضافية:
+arabic.LaunchProgram=تشغيل {#MyAppName}
+arabic.AppRunningWarning=تطبيق {#MyAppName} قيد التشغيل حالياً. يرجى إغلاق البرنامج قبل المتابعة.
+arabic.VisitWebsite=زيارة الموقع الرسمي لـ {#MyAppName}
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -58,32 +75,39 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "dist\NeonSyncs.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
-; La DLL mpv est deja embarquee dans l'exe via --add-binary,
-; mais si vous ne l'avez pas embarquee, decommentez la ligne suivante :
-; Source: "mpv-2.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "brand\logo.ico"; DestDir: "{app}\brand"; Flags: ignoreversion
+Source: "i18n\*"; DestDir: "{app}\i18n"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"
+Name: "{group}\{cm:VisitWebsite}"; Filename: "{#MyAppURL}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; IconFilename: "{app}\icon.ico"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: files; Name: "{app}\lang.txt"
 
 [Code]
-// Enregistre la langue choisie a l'installation dans lang.txt, a cote
-// de l'executable. L'application (client.py) lit ce fichier au
-// demarrage pour afficher son interface dans la meme langue que
-// l'installateur (anglais ou francais).
+// Writes the language chosen during setup into lang.txt next to the executable.
+// client.py reads this file on startup to match the installer's language.
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   LangFile: string;
+  LangCode: string;
 begin
   if CurStep = ssPostInstall then
   begin
     LangFile := ExpandConstant('{app}\lang.txt');
-    SaveStringToFile(LangFile, ActiveLanguage(), False);
+    if ActiveLanguage() = 'french' then
+      LangCode := 'fr'
+    else if ActiveLanguage() = 'russian' then
+      LangCode := 'ru'
+    else if ActiveLanguage() = 'arabic' then
+      LangCode := 'ar'
+    else
+      LangCode := 'en';
+    SaveStringToFile(LangFile, LangCode, False);
   end;
 end;
