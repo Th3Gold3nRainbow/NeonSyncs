@@ -51,9 +51,9 @@ import time
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QLabel, QFileDialog, QListWidget, QSplitter, QFrame,
-    QShortcut, QSlider, QComboBox
+    QShortcut, QSlider, QComboBox, QGraphicsDropShadowEffect
 )
-from PyQt5.QtGui import QKeySequence, QIcon
+from PyQt5.QtGui import QKeySequence, QIcon, QColor, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QUrl, pyqtSlot
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWebChannel import QWebChannel
@@ -184,13 +184,14 @@ STRINGS = {
 
 
 def _base_dir():
-    """Dossier contenant l'executable (ou le script, si lance depuis les
-    sources) — c'est la ou l'installateur place icon.ico et lang.txt."""
+    """Dossier contenant l'exécutable (ou le script, si lancé depuis les
+    sources) — c'est là où l'installateur place icon.ico et lang.txt."""
     return os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
 
 
-def _get_asset_path(rel_path):
-    """Trouve un fichier inclus dans le bundle PyInstaller ou dans le dossier source."""
+def resource_path(rel_path):
+    """Résout le chemin d'une ressource (police, image, html, icône) que l'application
+    soit exécutée depuis les sources ou packagée avec PyInstaller (--onefile / sys._MEIPASS)."""
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         p = os.path.join(sys._MEIPASS, rel_path)
         if os.path.exists(p):
@@ -201,9 +202,35 @@ def _get_asset_path(rel_path):
     return os.path.abspath(rel_path)
 
 
+_get_asset_path = resource_path
+
+
+def load_application_fonts():
+    """Charge les polices embarquées (Orbitron et Rajdhani) depuis assets/fonts/."""
+    fonts_dir = resource_path(os.path.join("assets", "fonts"))
+    if not os.path.isdir(fonts_dir):
+        return
+    for font_file in os.listdir(fonts_dir):
+        if font_file.lower().endswith((".ttf", ".otf")):
+            path = os.path.join(fonts_dir, font_file)
+            try:
+                QFontDatabase.addApplicationFont(path)
+            except Exception:
+                pass
+
+
+def make_neon_glow(color_str, blur_radius=14):
+    """Crée un halo néon discret pour un widget via QGraphicsDropShadowEffect."""
+    effect = QGraphicsDropShadowEffect()
+    effect.setColor(QColor(color_str))
+    effect.setBlurRadius(blur_radius)
+    effect.setOffset(0, 0)
+    return effect
+
+
 def _detect_language():
-    """Langue choisie a l'installation (fichier lang.txt ecrit par Inno
-    Setup a cote de l'executable), sinon francais par defaut."""
+    """Langue choisie à l'installation (fichier lang.txt écrit par Inno
+    Setup à côté de l'exécutable), sinon français par défaut."""
     try:
         lang_file = os.path.join(_base_dir(), "lang.txt")
         with open(lang_file, "r", encoding="utf-8") as f:
@@ -219,7 +246,7 @@ def _detect_language():
 
 LANG = _detect_language()
 
-ICON_PATH = os.path.join(_base_dir(), "icon.ico")
+ICON_PATH = resource_path("icon.ico")
 
 
 def tr(key, **kwargs):
@@ -230,182 +257,303 @@ def tr(key, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# Thème visuel — sombre avec accent néon unique (pas de surcharge de couleurs)
+# Section THEME — Palette extraite de BRAND.md (https://neonsyncs.com)
 # ---------------------------------------------------------------------------
-STYLE_SHEET = """
-QWidget {
-    background-color: #0b0d12;
-    color: #e4e6eb;
-    font-family: 'Segoe UI', 'Inter', Arial, sans-serif;
-    font-size: 10pt;
+THEME = {
+    # Arrière-plans
+    "bg_window": "#08070d",             # Fond principal (noir profond bleuté/violacé)
+    "bg_panel": "#0e091a",              # Fond du panneau latéral et de la barre de contrôle
+    "bg_surface": "#0a0716",            # Fond des listes (chat, utilisateurs)
+    "bg_card": "#0e091c",               # Fond des cartes et conteneurs
+    "bg_input": "#080812",              # Fond des QLineEdit / QComboBox
+    "bg_input_focus": "#0c0a18",        # Fond QLineEdit au focus
+    "bg_video": "#000000",              # Fond du lecteur vidéo MPV
+    "bg_slider_groove": "#141224",      # Rail de la barre de progression
+
+    # Bordures
+    "border_default": "rgba(0, 240, 255, 0.18)",  # Bordure cyan subtile standard
+    "border_subtle": "rgba(0, 240, 255, 0.12)",   # Séparateurs très discrets
+    "border_card": "rgba(0, 240, 255, 0.20)",     # Bordures de cartes
+    "border_focus": "rgba(0, 240, 255, 0.60)",    # Bordure active au focus / survol
+
+    # Accents & Lueurs
+    "accent_primary": "#00f0ff",        # Cyan néon (accent principal du site)
+    "accent_secondary": "#a855f7",      # Violet néon (accent secondaire du site)
+    "accent_pink": "#ec4899",           # Rose néon (thème synthwave / gradient logo)
+    "glow_primary": "rgba(0, 240, 255, 0.70)",     # Lueur cyan
+    "glow_secondary": "rgba(168, 85, 247, 0.70)", # Lueur violette
+
+    # Textes
+    "text_primary": "#eaeaf6",          # Texte principal (blanc chaud néon)
+    "text_white": "#ffffff",            # Blanc pur éclatant (survol boutons néon)
+    "text_muted": "#8383a6",            # Texte estompé / labels
+    "text_dim": "#525270",              # Texte très estompé
+
+    # Statuts de connexion & alertes
+    "status_connected": "#00ff9d",          # Vert néon (Connecté / OK)
+    "status_connected_bg": "rgba(0, 255, 157, 0.10)",
+    "status_connected_border": "rgba(0, 255, 157, 0.30)",
+    "status_error": "#ff3860",              # Rouge néon (Erreurs / Déconnecté perdu)
+    "status_error_bg": "rgba(255, 56, 96, 0.10)",
+    "status_error_border": "rgba(255, 56, 96, 0.30)",
+    "status_reconnecting": "#ffb627",       # Ambre néon (Reconnexion)
+    "status_reconnecting_bg": "rgba(255, 182, 39, 0.10)",
+    "status_reconnecting_border": "rgba(255, 182, 39, 0.30)",
+    "status_disconnected": "#8383a6",       # Gris néon (Déconnecté normal)
+
+    # Boutons néon cyan (Action principale)
+    "btn_neon_border": "rgba(0, 240, 255, 0.45)",
+    "btn_neon_border_hover": "rgba(0, 240, 255, 0.90)",
+    "btn_neon_bg_top": "rgba(0, 240, 255, 0.12)",
+    "btn_neon_bg_bottom": "rgba(0, 240, 255, 0.03)",
+    "btn_neon_hover_top": "rgba(0, 240, 255, 0.26)",
+    "btn_neon_hover_bottom": "rgba(0, 240, 255, 0.10)",
+
+    # Boutons néon rose/violet (Action alternative / Rejoindre)
+    "btn_pink_border": "rgba(229, 9, 20, 0.50)",
+    "btn_pink_border_hover": "rgba(229, 9, 20, 0.90)",
+    "btn_pink_bg_top": "rgba(229, 9, 20, 0.14)",
+    "btn_pink_bg_bottom": "rgba(229, 9, 20, 0.04)",
+    "btn_pink_hover_top": "rgba(229, 9, 20, 0.30)",
+    "btn_pink_hover_bottom": "rgba(229, 9, 20, 0.12)",
+
+    # Polices
+    "font_body": "'Rajdhani', 'Segoe UI', Arial, sans-serif",
+    "font_display": "'Orbitron', 'Segoe UI', Arial, sans-serif",
+    "font_mono": "'Orbitron', 'Consolas', monospace",
 }
-QLabel {
-    color: #7b8394;
-}
-QLabel[role="section"] {
-    color: #39f2c8;
+
+
+# ---------------------------------------------------------------------------
+# Thème visuel QSS généré dynamiquement à partir des tokens THEME
+# ---------------------------------------------------------------------------
+STYLE_SHEET = f"""
+QWidget {{
+    background-color: {THEME['bg_window']};
+    color: {THEME['text_primary']};
+    font-family: {THEME['font_body']};
+    font-size: 10.5pt;
+    font-weight: 500;
+}}
+QLabel {{
+    color: {THEME['text_muted']};
+    font-family: {THEME['font_body']};
+}}
+QLabel[role="section"] {{
+    color: {THEME['accent_primary']};
+    font-family: {THEME['font_display']};
     font-weight: 700;
-    font-size: 9pt;
-    padding-top: 6px;
-}
-QLabel[role="status"] {
-    color: #e4e6eb;
+    font-size: 8.5pt;
+    letter-spacing: 1px;
+    padding-top: 8px;
+}}
+QLabel[role="status"] {{
+    color: {THEME['text_primary']};
     font-weight: 600;
     padding: 4px 0;
-}
-QLabel[role="status"][state="connected"] {
-    color: #39f2c8;
-}
-QLabel[role="status"][state="error"] {
-    color: #f56565;
-}
-QLabel[role="status"][state="reconnecting"] {
-    color: #f6ad55;
-}
-QLabel[role="status"][state="disconnected"] {
-    color: #7b8394;
-}
-QLineEdit {
-    background-color: #161a22;
-    border: 1px solid #242a35;
-    border-radius: 6px;
-    padding: 7px 9px;
-    color: #e4e6eb;
-    selection-background-color: #39f2c8;
-    selection-color: #0b0d12;
-}
-QLineEdit:focus {
-    border: 1px solid #39f2c8;
-}
-QPushButton {
-    background-color: #161a22;
-    border: 1px solid #242a35;
+}}
+QLabel[role="status"][state="connected"] {{
+    color: {THEME['status_connected']};
+}}
+QLabel[role="status"][state="error"] {{
+    color: {THEME['status_error']};
+}}
+QLabel[role="status"][state="reconnecting"] {{
+    color: {THEME['status_reconnecting']};
+}}
+QLabel[role="status"][state="disconnected"] {{
+    color: {THEME['status_disconnected']};
+}}
+
+QLineEdit {{
+    background-color: {THEME['bg_input']};
+    border: 1px solid {THEME['border_default']};
+    border-radius: 8px;
+    padding: 7px 10px;
+    color: {THEME['text_primary']};
+    font-family: {THEME['font_body']};
+    font-size: 10.5pt;
+    selection-background-color: {THEME['accent_primary']};
+    selection-color: {THEME['bg_window']};
+}}
+QLineEdit:focus {{
+    border: 1px solid {THEME['border_focus']};
+    background-color: {THEME['bg_input_focus']};
+}}
+
+QPushButton {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 240, 255, 0.08), stop:1 rgba(0, 240, 255, 0.02));
+    border: 1px solid rgba(0, 240, 255, 0.25);
     border-radius: 8px;
     padding: 8px 14px;
-    color: #e4e6eb;
-}
-QPushButton:hover {
-    border: 1px solid #39f2c8;
-    color: #39f2c8;
-}
-QPushButton:pressed {
-    background-color: #0e1116;
-}
-QPushButton[role="primary"] {
-    background-color: #10312c;
-    border: 1px solid #39f2c8;
-    color: #39f2c8;
+    color: {THEME['text_primary']};
+    font-family: {THEME['font_display']};
+    font-size: 9.5pt;
     font-weight: 600;
-}
-QPushButton[role="primary"]:hover {
-    background-color: #14403a;
-}
-QPushButton[role="small"] {
-    padding: 6px 10px;
-    font-size: 9pt;
-}
-QPushButton[role="danger"] {
-    background-color: #2a1215;
-    border: 1px solid #e05252;
-    color: #e05252;
-}
-QPushButton[role="danger"]:hover {
-    background-color: #38181c;
-}
-QComboBox {
-    background-color: #161a22;
-    border: 1px solid #242a35;
-    border-radius: 6px;
-    padding: 6px 9px;
-    color: #e4e6eb;
-}
-QComboBox:focus, QComboBox:hover {
-    border: 1px solid #39f2c8;
-}
-QComboBox::drop-down {
-    border: none;
-    width: 20px;
-}
-QComboBox QAbstractItemView {
-    background-color: #161a22;
-    border: 1px solid #242a35;
-    selection-background-color: #14403a;
-    selection-color: #39f2c8;
-    color: #e4e6eb;
-}
-QListWidget {
-    background-color: #10131a;
-    border: 1px solid #1c2028;
+}}
+QPushButton:hover {{
+    border: 1px solid {THEME['accent_primary']};
+    color: {THEME['accent_primary']};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 240, 255, 0.18), stop:1 rgba(0, 240, 255, 0.05));
+}}
+QPushButton:pressed {{
+    background: {THEME['bg_window']};
+}}
+
+QPushButton[role="primary"] {{
+    border: 1px solid {THEME['btn_neon_border']};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {THEME['btn_neon_bg_top']}, stop:1 {THEME['btn_neon_bg_bottom']});
+    color: {THEME['accent_primary']};
+    font-family: {THEME['font_display']};
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}}
+QPushButton[role="primary"]:hover {{
+    border: 1px solid {THEME['btn_neon_border_hover']};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {THEME['btn_neon_hover_top']}, stop:1 {THEME['btn_neon_hover_bottom']});
+    color: {THEME['text_white']};
+}}
+
+QPushButton[role="pink"] {{
+    border: 1px solid {THEME['btn_pink_border']};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {THEME['btn_pink_bg_top']}, stop:1 {THEME['btn_pink_bg_bottom']});
+    color: {THEME['accent_secondary']};
+    font-family: {THEME['font_display']};
+    font-weight: 700;
+}}
+QPushButton[role="pink"]:hover {{
+    border: 1px solid {THEME['btn_pink_border_hover']};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {THEME['btn_pink_hover_top']}, stop:1 {THEME['btn_pink_hover_bottom']});
+    color: {THEME['text_white']};
+}}
+
+QPushButton[role="small"] {{
+    padding: 5px 10px;
+    font-size: 8.5pt;
+}}
+
+QPushButton[role="danger"] {{
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid {THEME['status_error']};
+    color: {THEME['status_error']};
+    font-family: {THEME['font_display']};
+    font-weight: 600;
+}}
+QPushButton[role="danger"]:hover {{
+    background: rgba(239, 68, 68, 0.25);
+    color: {THEME['text_white']};
+}}
+
+QComboBox {{
+    background-color: {THEME['bg_input']};
+    border: 1px solid {THEME['border_default']};
     border-radius: 8px;
-    padding: 4px;
-    outline: none;
-}
-QListWidget::item {
-    padding: 3px 4px;
-    border-radius: 4px;
-}
-QListWidget::item:selected {
-    background-color: #14403a;
-    color: #39f2c8;
-}
-QScrollBar:vertical {
-    background: #10131a;
-    width: 10px;
-    margin: 0;
-    border-radius: 5px;
-}
-QScrollBar::handle:vertical {
-    background: #242a35;
-    border-radius: 5px;
-    min-height: 24px;
-}
-QScrollBar::handle:vertical:hover {
-    background: #39f2c8;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-QFrame#videoFrame {
-    background-color: #000000;
+    padding: 7px 10px;
+    color: {THEME['text_primary']};
+    font-family: {THEME['font_body']};
+}}
+QComboBox:focus, QComboBox:hover {{
+    border: 1px solid {THEME['border_focus']};
+}}
+QComboBox::drop-down {{
     border: none;
-}
-QWidget#panel {
-    background-color: #0e1016;
-}
-QWidget#controlsBar {
-    background-color: #0e1016;
-}
-QLabel#timeLabel {
-    color: #9aa0ac;
-    font-size: 9pt;
+    width: 22px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: {THEME['bg_panel']};
+    border: 1px solid {THEME['border_default']};
+    selection-background-color: rgba(0, 240, 255, 0.20);
+    selection-color: {THEME['accent_primary']};
+    color: {THEME['text_primary']};
+    padding: 4px;
+}}
+
+QListWidget {{
+    background-color: {THEME['bg_surface']};
+    border: 1px solid {THEME['border_default']};
+    border-radius: 10px;
+    padding: 6px;
+    outline: none;
+    font-family: {THEME['font_body']};
+    font-size: 10pt;
+}}
+QListWidget::item {{
+    padding: 4px 6px;
+    border-radius: 5px;
+}}
+QListWidget::item:selected {{
+    background-color: rgba(0, 240, 255, 0.18);
+    color: {THEME['accent_primary']};
+}}
+
+QScrollBar:vertical {{
+    background: transparent;
+    width: 6px;
+    margin: 0;
+    border-radius: 3px;
+}}
+QScrollBar::handle:vertical {{
+    background: rgba(0, 240, 255, 0.25);
+    border-radius: 3px;
+    min-height: 24px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: rgba(0, 240, 255, 0.55);
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0px;
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
+
+QFrame#videoFrame {{
+    background-color: {THEME['bg_video']};
+    border: none;
+}}
+QWidget#panel {{
+    background-color: {THEME['bg_panel']};
+    border-left: 1px solid {THEME['border_subtle']};
+}}
+QWidget#controlsBar {{
+    background-color: {THEME['bg_panel']};
+    border-top: 1px solid {THEME['border_subtle']};
+}}
+QLabel#timeLabel {{
+    color: {THEME['text_muted']};
+    font-family: {THEME['font_display']};
+    font-size: 8.5pt;
+    font-weight: 600;
     min-width: 48px;
-}
-QSlider::groove:horizontal {
-    height: 5px;
-    background: #1c2028;
-    border-radius: 2px;
-}
-QSlider::sub-page:horizontal {
-    height: 5px;
-    background: #39f2c8;
-    border-radius: 2px;
-}
-QSlider::add-page:horizontal {
-    height: 5px;
-    background: #1c2028;
-    border-radius: 2px;
-}
-QSlider::handle:horizontal {
+}}
+
+QSlider::groove:horizontal {{
+    height: 6px;
+    background: {THEME['bg_slider_groove']};
+    border-radius: 3px;
+}}
+QSlider::sub-page:horizontal {{
+    height: 6px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {THEME['accent_secondary']}, stop:1 {THEME['accent_primary']});
+    border-radius: 3px;
+}}
+QSlider::add-page:horizontal {{
+    height: 6px;
+    background: {THEME['bg_slider_groove']};
+    border-radius: 3px;
+}}
+QSlider::handle:horizontal {{
     width: 14px;
     height: 14px;
-    margin: -5px 0;
-    background: #e4e6eb;
-    border: 2px solid #39f2c8;
+    margin: -4px 0;
+    background: {THEME['text_primary']};
+    border: 2px solid {THEME['accent_primary']};
     border-radius: 7px;
-}
-QSlider::handle:horizontal:hover {
-    background: #39f2c8;
-}
+}}
+QSlider::handle:horizontal:hover {{
+    background: {THEME['accent_primary']};
+    border: 2px solid {THEME['text_white']};
+}}
 """
 
 
@@ -423,6 +571,11 @@ def _apply_dark_titlebar(widget):
             ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, attr, ctypes.byref(value), ctypes.sizeof(value)
             )
+        # Windows 11 DWMWA_CAPTION_COLOR (35) : fond sombre néon #08070d (COLORREF 0x000d0708)
+        caption_color = ctypes.c_int(0x000d0708)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+            hwnd, 35, ctypes.byref(caption_color), ctypes.sizeof(caption_color)
+        )
     except Exception:
         pass
 
@@ -608,12 +761,12 @@ class P2PClient(QObject):
         self.channel.registerObject("bridge", self.bridge)
         self.view.page().setWebChannel(self.channel)
 
-        html_path = _get_asset_path(os.path.join("p2p", "p2p.html"))
+        html_path = resource_path(os.path.join("p2p", "p2p.html"))
         self.view.load(QUrl.fromLocalFile(os.path.abspath(html_path)))
 
     def _on_bridge_ready(self):
         self.bridge_ready = True
-        ice_path = _get_asset_path(os.path.join("p2p", "ice_servers.json"))
+        ice_path = resource_path(os.path.join("p2p", "ice_servers.json"))
         if os.path.exists(ice_path):
             try:
                 with open(ice_path, "r", encoding="utf-8") as f:
@@ -875,6 +1028,8 @@ class SyncMPVWindow(QWidget):
         self.btn_back10 = QPushButton(tr("back_10"))
         self.btn_back10.clicked.connect(lambda: self.seek_relative(-10))
         self.btn_play = QPushButton(tr("play_pause"))
+        self.btn_play.setProperty("role", "primary")
+        self.btn_play.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=12))
         self.btn_play.clicked.connect(self.toggle_pause)
         self.btn_fwd10 = QPushButton(tr("fwd_10"))
         self.btn_fwd10.clicked.connect(lambda: self.seek_relative(10))
@@ -935,6 +1090,7 @@ class SyncMPVWindow(QWidget):
 
         self.btn_create_room = QPushButton(tr("create_room"))
         self.btn_create_room.setProperty("role", "primary")
+        self.btn_create_room.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=14))
         self.btn_create_room.clicked.connect(self.do_create_room)
         p2p_layout.addWidget(self.btn_create_room)
 
@@ -943,6 +1099,8 @@ class SyncMPVWindow(QWidget):
         self.input_room_id = QLineEdit()
         self.input_room_id.setPlaceholderText(tr("room_id_placeholder"))
         self.btn_join_room = QPushButton(tr("join_room"))
+        self.btn_join_room.setProperty("role", "pink")
+        self.btn_join_room.setGraphicsEffect(make_neon_glow(THEME["accent_secondary"], blur_radius=14))
         self.btn_join_room.clicked.connect(self.do_join_room)
         join_row.addWidget(self.input_room_id, stretch=1)
         join_row.addWidget(self.btn_join_room)
@@ -990,6 +1148,7 @@ class SyncMPVWindow(QWidget):
 
         self.btn_connect = QPushButton(tr("connect"))
         self.btn_connect.setProperty("role", "primary")
+        self.btn_connect.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=14))
         self.btn_connect.clicked.connect(self.do_connect)
         server_layout.addWidget(self.btn_connect)
 
@@ -1027,6 +1186,8 @@ class SyncMPVWindow(QWidget):
         self.chat_input.setPlaceholderText(tr("chat_placeholder"))
         self.chat_input.returnPressed.connect(self.send_chat)
         btn_send = QPushButton(tr("send"))
+        btn_send.setProperty("role", "primary")
+        btn_send.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=10))
         btn_send.clicked.connect(self.send_chat)
         chat_row.addWidget(self.chat_input)
         chat_row.addWidget(btn_send)
@@ -1655,6 +1816,8 @@ class SyncMPVWindow(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    load_application_fonts()
+    app.setStyleSheet(STYLE_SHEET)
     if os.path.exists(ICON_PATH):
         app.setWindowIcon(QIcon(ICON_PATH))
     win = SyncMPVWindow()
