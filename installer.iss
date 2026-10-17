@@ -47,6 +47,7 @@ english.AdditionalIcons=Additional shortcuts:
 english.LaunchProgram=Launch {#MyAppName}
 english.AppRunningWarning={#MyAppName} is currently running. Please close the application before continuing.
 english.VisitWebsite=Visit {#MyAppName} official website
+english.RemoveSettingsPrompt=Do you also want to remove your personal settings and data in %APPDATA%\NeonSyncs?
 
 ; --- French ---
 french.CreateDesktopIcon=Créer un raccourci sur le &bureau
@@ -54,6 +55,7 @@ french.AdditionalIcons=Raccourcis supplémentaires :
 french.LaunchProgram=Lancer {#MyAppName}
 french.AppRunningWarning={#MyAppName} est actuellement en cours d'exécution. Veuillez fermer l'application avant de continuer.
 french.VisitWebsite=Visiter le site officiel de {#MyAppName}
+french.RemoveSettingsPrompt=Souhaitez-vous également supprimer vos paramètres et données personnelles dans %APPDATA%\NeonSyncs ?
 
 ; --- Russian ---
 russian.CreateDesktopIcon=Создать ярлык на &Рабочем столе
@@ -61,6 +63,7 @@ russian.AdditionalIcons=Дополнительные ярлыки:
 russian.LaunchProgram=Запустить {#MyAppName}
 russian.AppRunningWarning=Приложение {#MyAppName} запущено. Пожалуйста, закройте его перед продолжением.
 russian.VisitWebsite=Посетить официальный сайт {#MyAppName}
+russian.RemoveSettingsPrompt=Удалить также ваши персональные настройки и данные в %APPDATA%\NeonSyncs?
 
 ; --- Arabic ---
 arabic.CreateDesktopIcon=إنشاء اختصار على &سطح المكتب
@@ -68,6 +71,7 @@ arabic.AdditionalIcons=اختصارات إضافية:
 arabic.LaunchProgram=تشغيل {#MyAppName}
 arabic.AppRunningWarning=تطبيق {#MyAppName} قيد التشغيل حالياً. يرجى إغلاق البرنامج قبل المتابعة.
 arabic.VisitWebsite=زيارة الموقع الرسمي لـ {#MyAppName}
+arabic.RemoveSettingsPrompt=هل ترغب أيضاً في حذف إعداداتك وبياناتك الشخصية في %APPDATA%\NeonSyncs؟
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -109,5 +113,23 @@ begin
     else
       LangCode := 'en';
     SaveStringToFile(LangFile, LangCode, False);
+  end;
+end;
+
+// Prompts user during uninstallation to cleanly remove %APPDATA%\NeonSyncs if desired.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AppDataDir: string;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    AppDataDir := ExpandConstant('{userappdata}\{#MyAppName}');
+    if DirExists(AppDataDir) then
+    begin
+      if MsgBox(CustomMessage('RemoveSettingsPrompt'), mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        DelTree(AppDataDir, True, True, True);
+      end;
+    end;
   end;
 end;

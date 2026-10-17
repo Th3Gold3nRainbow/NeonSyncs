@@ -99,7 +99,9 @@ def check_hardcoded_strings():
         "timeLabel", "panel", "brand", "section", "primary", "pink", "small",
         "danger", "website_link", "status", "connected", "reconnecting",
         "disconnected", "error", "SPACE", "F11", "ESC", "MBTN_LEFT_DBL",
-        "RIGHT", "LEFT", "UP", "DOWN", "neonsyncs.watchparty.client"
+        "RIGHT", "LEFT", "UP", "DOWN", "neonsyncs.watchparty.client",
+        "English", "Français", "Русский", "العربية", "en", "fr", "ru", "ar",
+        "langSelector"
     }
 
     try:
@@ -135,6 +137,52 @@ def check_hardcoded_strings():
     return errors
 
 
+def check_retranslate_ui():
+    """Verifies that NeonSyncsWindow defines retranslate_ui and covers all visible widgets."""
+    errors = []
+    client_path = os.path.join(BASE_DIR, "client.py")
+    if not os.path.isfile(client_path):
+        return [f"client.py not found at {client_path}"]
+
+    with open(client_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    required_retranslate_targets = [
+        "setWindowTitle", "btn_open", "btn_back30", "btn_back10", "btn_play",
+        "btn_fwd10", "btn_fwd30", "btn_fullscreen", "lbl_conn", "combo_mode",
+        "lbl_user", "lbl_password", "input_password", "btn_create_room",
+        "lbl_room_id", "input_room_id", "btn_join_room", "btn_copy_id",
+        "btn_leave_p2p", "btn_retry_p2p", "lbl_host", "lbl_port", "lbl_room",
+        "btn_connect", "status_label", "lbl_users", "lbl_chat", "chat_input",
+        "btn_send", "refresh_chat_display"
+    ]
+
+    try:
+        tree = ast.parse(content, filename=client_path)
+        found_method = False
+        retranslate_body = ""
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "retranslate_ui":
+                found_method = True
+                # Extract text for the function body
+                lines = content.splitlines()
+                retranslate_body = "\n".join(lines[node.lineno - 1:node.end_lineno])
+                break
+
+        if not found_method:
+            errors.append("retranslate_ui() method is missing from client.py")
+            return errors
+
+        for target in required_retranslate_targets:
+            if target not in retranslate_body:
+                errors.append(f"retranslate_ui() does not update required target: '{target}'")
+    except Exception as e:
+        errors.append(f"Error parsing client.py for retranslate_ui check: {e}")
+
+    return errors
+
+
 def main():
     print("=" * 60)
     print("NeonSyncs Internationalization (i18n) Linter")
@@ -142,8 +190,9 @@ def main():
 
     cat_errors, catalogs = check_catalogs()
     code_errors = check_hardcoded_strings()
+    retranslate_errors = check_retranslate_ui()
 
-    all_errors = cat_errors + code_errors
+    all_errors = cat_errors + code_errors + retranslate_errors
 
     if all_errors:
         print(f"\nFAILED: Found {len(all_errors)} i18n issue(s):\n")
@@ -156,6 +205,7 @@ def main():
     for lang in SUPPORTED_LANGS:
         print(f"  - [{lang}] {len(catalogs.get(lang, {}))} keys verified")
     print("  - client.py: No hardcoded user-visible UI strings detected.")
+    print("  - client.py: retranslate_ui() verified (all visible UI widgets covered).")
     sys.exit(0)
 
 

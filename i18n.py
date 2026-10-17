@@ -85,8 +85,59 @@ def _detect_system_language() -> str:
     return DEFAULT_LANGUAGE
 
 
-def detect_language() -> str:
-    """Reads language chosen at installation from lang.txt, or falls back to system."""
+def get_settings_dir() -> str:
+    """Returns the user AppData directory for NeonSyncs (%APPDATA%\\NeonSyncs)."""
+    app_data = os.environ.get("APPDATA")
+    if not app_data:
+        app_data = os.path.expanduser("~")
+    path = os.path.join(app_data, "NeonSyncs")
+    return path
+
+
+def get_settings_path() -> str:
+    """Returns full path to settings.json in user AppData."""
+    return os.path.join(get_settings_dir(), "settings.json")
+
+
+def load_settings() -> Dict[str, Any]:
+    """Loads settings.json from user AppData, returning empty dict on failure."""
+    path = get_settings_path()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception as e:
+            log.warning("Could not read settings.json: %s", e)
+    return {}
+
+
+def save_settings(data: Dict[str, Any]):
+    """Safely writes settings.json to user AppData without crashing."""
+    try:
+        sdir = get_settings_dir()
+        os.makedirs(sdir, exist_ok=True)
+        path = get_settings_path()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        log.warning("Could not write settings.json to %s: %s", get_settings_path(), e)
+
+
+def save_user_language(lang: str):
+    """Saves the user's explicit language choice to %APPDATA%\\NeonSyncs\\settings.json."""
+    if lang not in SUPPORTED_LANGUAGES:
+        return
+    settings = load_settings()
+    settings["language"] = lang
+    save_settings(settings)
+
+
+def read_installer_language() -> str:
+    """Reads language written by installer in lang.txt next to executable.
+    Strictly read-only; the application never writes to this file.
+    """
     try:
         lang_file = os.path.join(_base_dir(), "lang.txt")
         if os.path.exists(lang_file):
@@ -101,9 +152,54 @@ def detect_language() -> str:
             if "arabic" in content or content == "ar":
                 return "ar"
     except Exception as e:
-        log.warning("Could not read lang.txt: %s", e)
+        log.warning("Could not read installer lang.txt: %s", e)
+    return None
 
-    return _detect_system_language()
+
+def detect_language() -> str:
+    """Detects active language based on priority rules:
+    a. User choice in settings.json (unless installer was re-run since);
+    b. Installer language in lang.txt;
+    c. System locale (QLocale);
+    d. Fallback to English.
+    """
+    settings = load_settings()
+    user_lang = settings.get("language")
+    last_installer = settings.get("last_installer_lang")
+    current_installer = read_installer_language()
+
+    # Rule a & b: Check installer re-run vs user choice
+    if current_installer:
+        if last_installer is not None and current_installer != last_installer:
+            # Installer was re-run with a different language: installer wins, clears user choice
+            settings["language"] = current_installer
+            settings["last_installer_lang"] = current_installer
+            save_settings(settings)
+            return current_installer
+
+        # If last_installer not recorded yet, store it
+        if last_installer != current_installer:
+            settings["last_installer_lang"] = current_installer
+            save_settings(settings)
+
+        # If user made an explicit choice, it takes priority
+        if user_lang in SUPPORTED_LANGUAGES:
+            return user_lang
+
+        # Otherwise installer choice wins
+        return current_installer
+
+    # No installer lang.txt: user choice if valid
+    if user_lang in SUPPORTED_LANGUAGES:
+        return user_lang
+
+    # Rule c: System locale
+    sys_lang = _detect_system_language()
+    if sys_lang in SUPPORTED_LANGUAGES:
+        return sys_lang
+
+    # Rule d: English fallback
+    return DEFAULT_LANGUAGE
 
 
 def init_i18n(preferred_lang: str = None) -> str:

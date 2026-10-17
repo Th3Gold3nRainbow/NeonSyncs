@@ -49,7 +49,7 @@ import threading
 import time
 import random
 
-from i18n import tr, get_language, set_language, is_rtl
+from i18n import tr, get_language, set_language, is_rtl, save_user_language, SUPPORTED_LANGUAGES
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -84,6 +84,7 @@ import mpv
 # Identité de l'application
 # ---------------------------------------------------------------------------
 APP_NAME = "NeonSyncs"
+APP_VERSION = "2.2.0"
 APP_URL = "https://neonsyncs.com"
 
 
@@ -370,6 +371,13 @@ QComboBox QAbstractItemView {{
     selection-color: {THEME['accent_primary']};
     color: {THEME['text_primary']};
     padding: 4px;
+}}
+QComboBox#langSelector {{
+    padding: 3px 6px;
+    font-size: 8.5pt;
+    font-family: {THEME['font_body']};
+    border-radius: 6px;
+    min-width: 78px;
 }}
 
 QListWidget {{
@@ -849,6 +857,8 @@ class NeonSyncsWindow(QWidget):
         self.is_seeking_via_slider = False
         self.shown_warnings = set()
         self.scheduled_action_id = 0
+        self.chat_history = []
+        self.current_status_info = ("status_disconnected", "disconnected", {})
 
         self._build_ui()
         self._init_mpv()
@@ -997,12 +1007,12 @@ class NeonSyncsWindow(QWidget):
         right.setContentsMargins(14, 14, 14, 14)
         right.setSpacing(6)
 
-        # En-tête de marque NeonSyncs (logo discret + titre officiel)
-        brand_header = QWidget()
-        brand_header.setLayoutDirection(Qt.LeftToRight)
-        brand_layout = QHBoxLayout(brand_header)
+        # En-tête de marque NeonSyncs (logo discret + titre officiel + sélecteur de langue)
+        self.brand_header = QWidget()
+        self.brand_header.setLayoutDirection(Qt.LeftToRight)
+        brand_layout = QHBoxLayout(self.brand_header)
         brand_layout.setContentsMargins(0, 0, 0, 6)
-        brand_layout.setSpacing(8)
+        brand_layout.setSpacing(6)
 
         logo_label = QLabel()
         logo_svg = resource_path(os.path.join("brand", "favicon.svg"))
@@ -1025,11 +1035,26 @@ class NeonSyncsWindow(QWidget):
         brand_title.setProperty("role", "brand")
         brand_layout.addWidget(brand_title)
         brand_layout.addStretch(1)
-        right.addWidget(brand_header)
 
-        lbl_conn = QLabel(tr("section_connection"))
-        lbl_conn.setProperty("role", "section")
-        right.addWidget(lbl_conn)
+        # Sélecteur de langue dans l'application (Phase 3 bis)
+        self.combo_lang = QComboBox()
+        self.combo_lang.setObjectName("langSelector")
+        self.combo_lang.setLayoutDirection(Qt.LeftToRight)
+        self.combo_lang.addItem("English", "en")
+        self.combo_lang.addItem("Français", "fr")
+        self.combo_lang.addItem("Русский", "ru")
+        self.combo_lang.addItem("العربية", "ar")
+        cur_lang = get_language()
+        lang_idx = {"en": 0, "fr": 1, "ru": 2, "ar": 3}.get(cur_lang, 0)
+        self.combo_lang.setCurrentIndex(lang_idx)
+        self.combo_lang.currentIndexChanged.connect(self.on_language_changed)
+        brand_layout.addWidget(self.combo_lang)
+
+        right.addWidget(self.brand_header)
+
+        self.lbl_conn = QLabel(tr("section_connection"))
+        self.lbl_conn.setProperty("role", "section")
+        right.addWidget(self.lbl_conn)
 
         # Sélecteur de mode (P2P / Serveur)
         self.combo_mode = QComboBox()
@@ -1045,9 +1070,11 @@ class NeonSyncsWindow(QWidget):
         self.input_password.setEchoMode(QLineEdit.Password)
         self.input_password.setPlaceholderText(tr("password_placeholder"))
 
-        right.addWidget(QLabel(tr("label_user")))
+        self.lbl_user = QLabel(tr("label_user"))
+        right.addWidget(self.lbl_user)
         right.addWidget(self.input_user)
-        right.addWidget(QLabel(tr("label_password")))
+        self.lbl_password = QLabel(tr("label_password"))
+        right.addWidget(self.lbl_password)
         right.addWidget(self.input_password)
 
         # --- Conteneur Mode P2P ---
@@ -1062,7 +1089,8 @@ class NeonSyncsWindow(QWidget):
         self.btn_create_room.clicked.connect(self.do_create_room)
         p2p_layout.addWidget(self.btn_create_room)
 
-        p2p_layout.addWidget(QLabel(tr("room_id")))
+        self.lbl_room_id = QLabel(tr("room_id"))
+        p2p_layout.addWidget(self.lbl_room_id)
         join_row = QHBoxLayout()
         self.input_room_id = QLineEdit()
         self.input_room_id.setLayoutDirection(Qt.LeftToRight)
@@ -1115,13 +1143,15 @@ class NeonSyncsWindow(QWidget):
         default_room = tr("default_room_name", id=random.randint(1000, 9999))
         self.input_room = QLineEdit(default_room)
 
-        for w, label in [
-            (self.input_host, tr("label_host")),
-            (self.input_port, tr("label_port")),
-            (self.input_room, tr("label_room")),
-        ]:
-            server_layout.addWidget(QLabel(label))
-            server_layout.addWidget(w)
+        self.lbl_host = QLabel(tr("label_host"))
+        self.lbl_port = QLabel(tr("label_port"))
+        self.lbl_room = QLabel(tr("label_room"))
+        server_layout.addWidget(self.lbl_host)
+        server_layout.addWidget(self.input_host)
+        server_layout.addWidget(self.lbl_port)
+        server_layout.addWidget(self.input_port)
+        server_layout.addWidget(self.lbl_room)
+        server_layout.addWidget(self.input_room)
 
         self.btn_connect = QPushButton(tr("connect"))
         self.btn_connect.setProperty("role", "primary")
@@ -1145,40 +1175,40 @@ class NeonSyncsWindow(QWidget):
         right.addWidget(self.btn_retry_p2p)
 
         # Utilisateurs
-        lbl_users = QLabel(tr("section_users"))
-        lbl_users.setProperty("role", "section")
-        right.addWidget(lbl_users)
+        self.lbl_users = QLabel(tr("section_users"))
+        self.lbl_users.setProperty("role", "section")
+        right.addWidget(self.lbl_users)
         self.user_list = QListWidget()
         self.user_list.setMaximumHeight(110)
         right.addWidget(self.user_list)
 
         # Chat
-        lbl_chat = QLabel(tr("section_chat"))
-        lbl_chat.setProperty("role", "section")
-        right.addWidget(lbl_chat)
+        self.lbl_chat = QLabel(tr("section_chat"))
+        self.lbl_chat.setProperty("role", "section")
+        right.addWidget(self.lbl_chat)
         self.chat_list = QListWidget()
         right.addWidget(self.chat_list, stretch=1)
         chat_row = QHBoxLayout()
         self.chat_input = QLineEdit()
         self.chat_input.setPlaceholderText(tr("chat_placeholder"))
         self.chat_input.returnPressed.connect(self.send_chat)
-        btn_send = QPushButton(tr("send"))
-        btn_send.setProperty("role", "primary")
-        btn_send.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=10))
-        btn_send.clicked.connect(self.send_chat)
+        self.btn_send = QPushButton(tr("send"))
+        self.btn_send.setProperty("role", "primary")
+        self.btn_send.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=10))
+        self.btn_send.clicked.connect(self.send_chat)
         chat_row.addWidget(self.chat_input)
-        chat_row.addWidget(btn_send)
+        chat_row.addWidget(self.btn_send)
         right.addLayout(chat_row)
 
         # Lien discret vers le site officiel https://neonsyncs.com
         c_muted = THEME["text_muted"]
-        lbl_site = QLabel(f'<a href="{APP_URL}" style="color:{c_muted}; text-decoration:none;">neonsyncs.com</a>')
-        lbl_site.setLayoutDirection(Qt.LeftToRight)
-        lbl_site.setOpenExternalLinks(True)
-        lbl_site.setAlignment(Qt.AlignCenter)
-        lbl_site.setCursor(Qt.PointingHandCursor)
-        lbl_site.setProperty("role", "website_link")
-        right.addWidget(lbl_site)
+        self.lbl_site = QLabel(f'<a href="{APP_URL}" style="color:{c_muted}; text-decoration:none;">neonsyncs.com</a>')
+        self.lbl_site.setLayoutDirection(Qt.LeftToRight)
+        self.lbl_site.setOpenExternalLinks(True)
+        self.lbl_site.setAlignment(Qt.AlignCenter)
+        self.lbl_site.setCursor(Qt.PointingHandCursor)
+        self.lbl_site.setProperty("role", "website_link")
+        right.addWidget(self.lbl_site)
 
         root.addWidget(self.right_panel, stretch=0)
 
@@ -1405,13 +1435,131 @@ class NeonSyncsWindow(QWidget):
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
 
+    def set_status(self, key: str, state: str = None, **params):
+        """Updates status label with a translation key and optional style state,
+        storing parameters for dynamic language switching.
+        """
+        self.current_status_info = (key, state, params)
+        self.status_label.setText(tr(key, **params))
+        if state:
+            self.set_status_state(state)
+
+    def on_language_changed(self, index: int):
+        code = self.combo_lang.itemData(index)
+        if not code or code == get_language():
+            return
+        set_language(code)
+        save_user_language(code)
+        self.retranslate_ui()
+
+    def add_user_chat_message(self, sender: str, message: str):
+        self.chat_history.append({"type": "user", "sender": sender, "message": message})
+        self.chat_list.addItem(f"\u2066{sender}\u2069: {message}")
+        self.chat_list.scrollToBottom()
+
+    def add_system_chat_message(self, key: str, prefix: str = "", **params):
+        self.chat_history.append({"type": "system", "key": key, "params": params, "prefix": prefix})
+        text = tr(key, **params)
+        self.chat_list.addItem(f"{prefix}{text}")
+        self.chat_list.scrollToBottom()
+
+    def refresh_chat_display(self):
+        self.chat_list.clear()
+        for entry in self.chat_history:
+            if entry.get("type") == "user":
+                sender = entry.get("sender", "")
+                msg = entry.get("message", "")
+                self.chat_list.addItem(f"\u2066{sender}\u2069: {msg}")
+            elif entry.get("type") == "system":
+                prefix = entry.get("prefix", "")
+                key = entry.get("key", "")
+                params = entry.get("params", {})
+                self.chat_list.addItem(f"{prefix}{tr(key, **params)}")
+        self.chat_list.scrollToBottom()
+
+    def retranslate_ui(self):
+        """Dynamically retranslates all visible UI widgets, tooltips, placeholders,
+        window title, status messages, and chat system messages.
+        Adjusts layout direction (LTR/RTL) while keeping strict LTR on media controls.
+        """
+        self.setWindowTitle(tr("window_title"))
+
+        self.btn_open.setText(tr("open_file"))
+        self.btn_back30.setText(tr("back_30"))
+        self.btn_back10.setText(tr("back_10"))
+        self.btn_play.setText(tr("play_pause"))
+        self.btn_fwd10.setText(tr("fwd_10"))
+        self.btn_fwd30.setText(tr("fwd_30"))
+        self.btn_fullscreen.setText(tr("fullscreen"))
+
+        self.lbl_conn.setText(tr("section_connection"))
+        self.combo_mode.setItemText(0, tr("mode_p2p"))
+        self.combo_mode.setItemText(1, tr("mode_server"))
+        self.lbl_user.setText(tr("label_user"))
+        self.lbl_password.setText(tr("label_password"))
+        self.input_password.setPlaceholderText(tr("password_placeholder"))
+
+        self.btn_create_room.setText(tr("create_room"))
+        self.lbl_room_id.setText(tr("room_id"))
+        self.input_room_id.setPlaceholderText(tr("room_id_placeholder"))
+        self.btn_join_room.setText(tr("join_room"))
+        if self.btn_copy_id.text() != tr("id_copied"):
+            self.btn_copy_id.setText(tr("copy_id"))
+        self.btn_leave_p2p.setText(tr("leave_room"))
+        self.btn_retry_p2p.setText(tr("p2p_retry"))
+
+        self.lbl_host.setText(tr("label_host"))
+        self.lbl_port.setText(tr("label_port"))
+        self.lbl_room.setText(tr("label_room"))
+        self.btn_connect.setText(tr("disconnect") if self.net_server.running else tr("connect"))
+
+        if hasattr(self, "current_status_info") and self.current_status_info:
+            key, state, params = self.current_status_info
+            self.status_label.setText(tr(key, **params))
+        else:
+            self.status_label.setText(tr("status_disconnected"))
+
+        self.lbl_users.setText(tr("section_users"))
+        self.lbl_chat.setText(tr("section_chat"))
+        self.chat_input.setPlaceholderText(tr("chat_placeholder"))
+        self.btn_send.setText(tr("send"))
+
+        self.refresh_chat_display()
+
+        rtl = is_rtl()
+        direction = Qt.RightToLeft if rtl else Qt.LeftToRight
+        app = QApplication.instance()
+        if app:
+            app.setLayoutDirection(direction)
+        self.setLayoutDirection(direction)
+
+        self.controls_widget.setLayoutDirection(Qt.LeftToRight)
+        self.time_current_label.setLayoutDirection(Qt.LeftToRight)
+        self.seek_slider.setLayoutDirection(Qt.LeftToRight)
+        self.time_total_label.setLayoutDirection(Qt.LeftToRight)
+        self.brand_header.setLayoutDirection(Qt.LeftToRight)
+        self.input_room_id.setLayoutDirection(Qt.LeftToRight)
+        self.input_my_room_id.setLayoutDirection(Qt.LeftToRight)
+        self.input_host.setLayoutDirection(Qt.LeftToRight)
+        self.input_port.setLayoutDirection(Qt.LeftToRight)
+        self.lbl_site.setLayoutDirection(Qt.LeftToRight)
+
+        if hasattr(self, "combo_lang"):
+            self.combo_lang.blockSignals(True)
+            idx = {"en": 0, "fr": 1, "ru": 2, "ar": 3}.get(get_language(), 0)
+            self.combo_lang.setCurrentIndex(idx)
+            self.combo_lang.blockSignals(False)
+
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
     def on_mode_changed(self, index):
         if self.active_net.running:
             self.active_net.close()
         self.user_list.clear()
         self.btn_retry_p2p.hide()
-        self.set_status_state("disconnected")
-        self.status_label.setText(tr("status_disconnected"))
+        self.set_status("status_disconnected", state="disconnected")
         if index == 0:  # P2P
             self.active_net = self.net_p2p
             self.p2p_container.show()
@@ -1426,8 +1574,7 @@ class NeonSyncsWindow(QWidget):
         password = self.input_password.text()
         self.last_p2p_action = ("create", user, password)
         self.btn_retry_p2p.hide()
-        self.set_status_state("reconnecting")
-        self.status_label.setText(tr("status_creating"))
+        self.set_status("status_creating", state="reconnecting")
         self.btn_create_room.setEnabled(False)
         self.btn_join_room.setEnabled(False)
         self.net_p2p.create_room(user, password)
@@ -1435,15 +1582,13 @@ class NeonSyncsWindow(QWidget):
     def do_join_room(self):
         room_id = self.input_room_id.text().strip()
         if not room_id:
-            self.set_status_state("error")
-            self.status_label.setText(tr("status_error", message=tr("error_room_id_required")))
+            self.set_status("status_error", state="error", message=tr("error_room_id_required"))
             return
         user = self.input_user.text().strip() or tr("default_username", id=random.randint(1000, 9999))
         password = self.input_password.text()
         self.last_p2p_action = ("join", room_id, user, password)
         self.btn_retry_p2p.hide()
-        self.set_status_state("reconnecting")
-        self.status_label.setText(tr("status_joining"))
+        self.set_status("status_joining", state="reconnecting")
         self.btn_create_room.setEnabled(False)
         self.btn_join_room.setEnabled(False)
         self.net_p2p.join_room(room_id, user, password)
@@ -1464,8 +1609,7 @@ class NeonSyncsWindow(QWidget):
         self.btn_retry_p2p.hide()
         self.btn_create_room.setEnabled(True)
         self.btn_join_room.setEnabled(True)
-        self.set_status_state("disconnected")
-        self.status_label.setText(tr("status_disconnected"))
+        self.set_status("status_disconnected", state="disconnected")
         self.user_list.clear()
 
     def on_room_created(self, room_id):
@@ -1490,7 +1634,7 @@ class NeonSyncsWindow(QWidget):
             self.btn_connect.setProperty("role", "primary")
             self.btn_connect.style().unpolish(self.btn_connect)
             self.btn_connect.style().polish(self.btn_connect)
-            self.set_status_state("disconnected")
+            self.set_status("status_disconnected", state="disconnected")
             return
         host = self.input_host.text().strip()
         try:
@@ -1504,8 +1648,7 @@ class NeonSyncsWindow(QWidget):
 
     def on_connected(self, ok, message):
         if ok:
-            self.set_status_state("connected")
-            self.status_label.setText(tr("status_connected"))
+            self.set_status("status_connected", state="connected")
             self.btn_retry_p2p.hide()
             if self.combo_mode.currentIndex() == 0:  # P2P
                 self.btn_leave_p2p.show()
@@ -1517,9 +1660,8 @@ class NeonSyncsWindow(QWidget):
                 self.btn_connect.style().unpolish(self.btn_connect)
                 self.btn_connect.style().polish(self.btn_connect)
         else:
-            self.set_status_state("error")
             friendly_msg = tr(message)
-            self.status_label.setText(tr("status_error", message=friendly_msg))
+            self.set_status("status_error", state="error", message=friendly_msg)
             if self.combo_mode.currentIndex() == 0:  # P2P
                 self.btn_create_room.setEnabled(True)
                 self.btn_join_room.setEnabled(True)
@@ -1533,12 +1675,10 @@ class NeonSyncsWindow(QWidget):
                 self.btn_connect.style().polish(self.btn_connect)
 
     def on_reconnecting(self):
-        self.set_status_state("reconnecting")
-        self.status_label.setText(tr("status_reconnecting"))
+        self.set_status("status_reconnecting", state="reconnecting")
 
     def on_disconnected(self):
-        self.set_status_state("disconnected")
-        self.status_label.setText(tr("status_disconnected_lost"))
+        self.set_status("status_disconnected_lost", state="disconnected")
         self.user_list.clear()
         if self.combo_mode.currentIndex() == 0:  # P2P
             self.btn_create_room.setEnabled(True)
@@ -1558,8 +1698,7 @@ class NeonSyncsWindow(QWidget):
         if not text:
             return
         if not self.net.running:
-            self.chat_list.addItem(tr("chat_not_connected"))
-            self.chat_list.scrollToBottom()
+            self.add_system_chat_message("chat_not_connected")
             return
         self.net.send({"type": "chat", "message": text})
         self.chat_input.clear()
@@ -1619,10 +1758,9 @@ class NeonSyncsWindow(QWidget):
         elif mtype == "chat":
             sender = msg.get("from", "")
             message = msg.get("message", "")
-            self.chat_list.addItem(f"\u2066{sender}\u2069: {message}")
-            self.chat_list.scrollToBottom()
+            self.add_user_chat_message(sender, message)
         elif mtype == "error":
-            self.status_label.setText(tr("status_error", message=msg.get('message', '')))
+            self.set_status("status_error", state="error", message=msg.get('message', ''))
             self.net.close()
 
     def apply_remote_state(self, msg: dict):
@@ -1648,8 +1786,7 @@ class NeonSyncsWindow(QWidget):
                 warn_key = f"no_file_{remote_base}"
                 if warn_key not in self.shown_warnings:
                     self.shown_warnings.add(warn_key)
-                    self.chat_list.addItem(f"⚠ {tr('warning_no_file', file=os.path.basename(remote_file))}")
-                    self.chat_list.scrollToBottom()
+                    self.add_system_chat_message("warning_no_file", prefix="⚠ ", file=os.path.basename(remote_file))
                 return
 
             name_diff = (remote_base != local_base)
@@ -1668,8 +1805,7 @@ class NeonSyncsWindow(QWidget):
                         reasons.append(f"\u2066{os.path.basename(remote_file)}\u2069 ≠ \u2066{os.path.basename(self.current_file)}\u2069")
                     if duration_diff:
                         reasons.append(f"\u2066{format_time(remote_duration)}\u2069 ≠ \u2066{format_time(local_duration)}\u2069")
-                    self.chat_list.addItem(f"⚠ {tr('warning_different_file', details=', '.join(reasons))}")
-                    self.chat_list.scrollToBottom()
+                    self.add_system_chat_message("warning_different_file", prefix="⚠ ", details=', '.join(reasons))
                 return  # Ne force PAS la synchronisation sur un fichier différent
 
         # 2. Action planifiée (play / pause / seek avec executeAt) (exigence 2)
