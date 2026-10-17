@@ -49,7 +49,7 @@ import threading
 import time
 import random
 
-from i18n import tr, get_language, set_language, is_rtl, save_user_language, SUPPORTED_LANGUAGES
+from i18n import tr, get_language, set_language, is_rtl, save_user_language, SUPPORTED_LANGUAGES, has_key
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -923,6 +923,11 @@ class NeonSyncsWindow(QWidget):
         self.scheduled_action_id = 0
         self.chat_history = []
         self.current_status_info = ("status_disconnected", "disconnected", {})
+        self._default_suffix = str(random.randint(1000, 9999))
+        self._username_is_default = True
+        self._default_room_suffix = str(random.randint(1000, 9999))
+        self._room_is_default = True
+        self._id_copied = False
 
         self._build_ui()
         self._init_mpv()
@@ -985,6 +990,36 @@ class NeonSyncsWindow(QWidget):
             "file": self.current_file,
             "duration": duration,
         })
+
+    def _format_default_user(self) -> str:
+        template = tr("default_username")
+        if "{id}" in template:
+            return tr("default_username", id=self._default_suffix)
+        return f"{template}-{self._default_suffix}"
+
+    def _format_default_room(self) -> str:
+        template = tr("default_room_name")
+        if "{id}" in template:
+            return tr("default_room_name", id=self._default_room_suffix)
+        return f"{template}-{self._default_room_suffix}"
+
+    def _on_user_text_edited(self, text: str):
+        if not text.strip():
+            self._default_suffix = str(random.randint(1000, 9999))
+            self._username_is_default = True
+            self.input_user.setText(self._format_default_user())
+            self.input_user.selectAll()
+        else:
+            self._username_is_default = False
+
+    def _on_room_text_edited(self, text: str):
+        if not text.strip():
+            self._default_room_suffix = str(random.randint(1000, 9999))
+            self._room_is_default = True
+            self.input_room.setText(self._format_default_room())
+            self.input_room.selectAll()
+        else:
+            self._room_is_default = False
 
     # ------------------------------------------------------------------
     # UI
@@ -1145,8 +1180,8 @@ class NeonSyncsWindow(QWidget):
         right.addWidget(self.combo_mode)
 
         # Champs communs (Pseudo & Mot de passe)
-        default_user = tr("default_username", id=random.randint(1000, 9999))
-        self.input_user = QLineEdit(default_user)
+        self.input_user = QLineEdit(self._format_default_user())
+        self.input_user.textEdited.connect(self._on_user_text_edited)
         self.input_password = QLineEdit()
         self.input_password.setEchoMode(QLineEdit.Password)
         self.input_password.setPlaceholderText(tr("password_placeholder"))
@@ -1221,8 +1256,8 @@ class NeonSyncsWindow(QWidget):
         self.input_port = QLineEdit("8999")
         self.input_port.setLayoutDirection(Qt.LeftToRight)
         self.input_port.setAlignment(Qt.AlignLeft)
-        default_room = tr("default_room_name", id=random.randint(1000, 9999))
-        self.input_room = QLineEdit(default_room)
+        self.input_room = QLineEdit(self._format_default_room())
+        self.input_room.textEdited.connect(self._on_room_text_edited)
 
         self.lbl_host = QLabel(tr("label_host"))
         self.lbl_port = QLabel(tr("label_port"))
@@ -1303,88 +1338,70 @@ class NeonSyncsWindow(QWidget):
 
     def _init_mpv(self):
         # Intègre mpv directement dans le QFrame (pas de fenêtre externe)
-        # NOTE : hwdec="no" desactive le decodage materiel (GPU). C'est
-        # volontaire : avec l'integration via "wid", le decodage materiel
-        # (hwdec="auto") provoque un ECRAN NOIR sur pas mal de cartes
-        # graphiques/pilotes — probleme connu de libmpv en mode embarque.
-        # Cout : un peu plus de charge CPU, mais une compatibilite bien
-        # plus large et fiable.
-        self.player = mpv.MPV(
-            wid=str(int(self.video_frame.winId())),
-            input_default_bindings=True,
-            input_vo_keyboard=True,
-            osc=True,
-            hwdec="no",
-        )
+        try:
+            self.player = mpv.MPV(
+                wid=str(int(self.video_frame.winId())),
+                input_default_bindings=True,
+                input_vo_keyboard=True,
+                osc=True,
+                hwdec="no",
+            )
 
-        @self.player.property_observer("pause")
-        def _on_pause_change(_name, value):
-            if self.applying_remote or value is None:
-                return
-            self.push_state()
+            @self.player.property_observer("pause")
+            def _on_pause_change(_name, value):
+                if self.applying_remote or value is None:
+                    return
+                self.push_state()
 
-        @self.player.event_callback("seek")
-        def _on_seek(_event):
-            if self.applying_remote:
-                return
-            self.push_state()
+            @self.player.event_callback("seek")
+            def _on_seek(_event):
+                if self.applying_remote:
+                    return
+                self.push_state()
 
-        # mpv capte le clavier/souris de sa propre fenêtre embarquée
-        # (input_vo_keyboard=True) : on enregistre donc les raccourcis
-        # directement côté mpv, et on relaie vers Qt via un signal
-        # (les callbacks mpv tournent dans un thread séparé).
-        # mpv capte le clavier/souris de sa propre fenêtre embarquée
-        # (input_vo_keyboard=True). input_default_bindings=True lie déjà
-        # 'f'/'F11'/double-clic à SON PROPRE mode plein écran interne
-        # (inutile ici, puisqu'on est intégré via wid) : on désactive
-        # d'abord ces raccourcis par défaut, puis on enregistre les nôtres,
-        # pour éviter tout conflit.
-        for key in ("f", "F11", "MBTN_LEFT_DBL", "SPACE"):
-            try:
-                self.player.command("keybind", key, "ignore")
-            except Exception:
-                pass
+            for key in ("f", "F11", "MBTN_LEFT_DBL", "SPACE"):
+                try:
+                    self.player.command("keybind", key, "ignore")
+                except Exception:
+                    pass
 
-        @self.player.on_key_press("SPACE")
-        def _mpv_toggle_pause():
-            self.pause_toggle_requested.emit()
+            @self.player.on_key_press("SPACE")
+            def _mpv_toggle_pause():
+                self.pause_toggle_requested.emit()
 
-        @self.player.on_key_press("f")
-        def _mpv_toggle_fs():
-            self.fs_toggle_requested.emit()
+            @self.player.on_key_press("f")
+            def _mpv_toggle_fs():
+                self.fs_toggle_requested.emit()
 
-        @self.player.on_key_press("F11")
-        def _mpv_toggle_fs11():
-            self.fs_toggle_requested.emit()
+            @self.player.on_key_press("F11")
+            def _mpv_toggle_fs11():
+                self.fs_toggle_requested.emit()
 
-        @self.player.on_key_press("ESC")
-        def _mpv_exit_fs():
-            self.fs_exit_requested.emit()
+            @self.player.on_key_press("ESC")
+            def _mpv_exit_fs():
+                self.fs_exit_requested.emit()
 
-        @self.player.on_key_press("MBTN_LEFT_DBL")
-        def _mpv_dbl_click():
-            self.fs_toggle_requested.emit()
+            @self.player.on_key_press("MBTN_LEFT_DBL")
+            def _mpv_dbl_click():
+                self.fs_toggle_requested.emit()
 
-        # Avancer / reculer au clavier : on lie ces touches directement
-        # côté mpv (comme pour le plein écran, mpv capte le clavier de
-        # sa fenêtre embarquée) et on relaie vers notre propre fonction
-        # de seek pour garantir la synchronisation immédiate avec les
-        # autres participants.
-        @self.player.on_key_press("RIGHT")
-        def _mpv_seek_fwd():
-            self.seek_requested.emit(10)
+            @self.player.on_key_press("RIGHT")
+            def _mpv_seek_fwd():
+                self.seek_requested.emit(10)
 
-        @self.player.on_key_press("LEFT")
-        def _mpv_seek_back():
-            self.seek_requested.emit(-10)
+            @self.player.on_key_press("LEFT")
+            def _mpv_seek_back():
+                self.seek_requested.emit(-10)
 
-        @self.player.on_key_press("UP")
-        def _mpv_seek_fwd_big():
-            self.seek_requested.emit(60)
+            @self.player.on_key_press("UP")
+            def _mpv_seek_fwd_big():
+                self.seek_requested.emit(60)
 
-        @self.player.on_key_press("DOWN")
-        def _mpv_seek_back_big():
-            self.seek_requested.emit(-60)
+            @self.player.on_key_press("DOWN")
+            def _mpv_seek_back_big():
+                self.seek_requested.emit(-60)
+        except Exception:
+            self.player = None
 
     # ------------------------------------------------------------------
     # Actions locales
@@ -1519,6 +1536,15 @@ class NeonSyncsWindow(QWidget):
         self.controls_widget.show()
         self.showNormal()
 
+    def _format_status(self, key: str, **params) -> str:
+        resolved_params = {}
+        for k, v in params.items():
+            if isinstance(v, str) and has_key(v):
+                resolved_params[k] = tr(v)
+            else:
+                resolved_params[k] = v
+        return tr(key, **resolved_params)
+
     def set_status_state(self, state: str):
         self.status_label.setProperty("state", state)
         self.status_label.style().unpolish(self.status_label)
@@ -1529,7 +1555,7 @@ class NeonSyncsWindow(QWidget):
         storing parameters for dynamic language switching.
         """
         self.current_status_info = (key, state, params)
-        self.status_label.setText(tr(key, **params))
+        self.status_label.setText(self._format_status(key, **params))
         if state:
             self.set_status_state(state)
 
@@ -1587,26 +1613,33 @@ class NeonSyncsWindow(QWidget):
         self.lbl_user.setText(tr("label_user"))
         self.lbl_password.setText(tr("label_password"))
         self.input_password.setPlaceholderText(tr("password_placeholder"))
+        if getattr(self, "_username_is_default", False):
+            self.input_user.setText(self._format_default_user())
 
         self.btn_create_room.setText(tr("create_room"))
         self.lbl_room_id.setText(tr("room_id"))
         self.input_room_id.setPlaceholderText(tr("room_id_placeholder"))
         self.btn_join_room.setText(tr("join_room"))
-        if self.btn_copy_id.text() != tr("id_copied"):
-            self.btn_copy_id.setText(tr("copy_id"))
+        self.btn_copy_id.setText(tr("id_copied") if getattr(self, "_id_copied", False) else tr("copy_id"))
         self.btn_leave_p2p.setText(tr("leave_room"))
         self.btn_retry_p2p.setText(tr("p2p_retry"))
 
         self.lbl_host.setText(tr("label_host"))
         self.lbl_port.setText(tr("label_port"))
         self.lbl_room.setText(tr("label_room"))
+        if getattr(self, "_room_is_default", False):
+            self.input_room.setText(self._format_default_room())
         self.btn_connect.setText(tr("disconnect") if self.net_server.running else tr("connect"))
 
         if hasattr(self, "current_status_info") and self.current_status_info:
             key, state, params = self.current_status_info
-            self.status_label.setText(tr(key, **params))
+            self.status_label.setText(self._format_status(key, **params))
         else:
             self.status_label.setText(tr("status_disconnected"))
+
+        if not getattr(self, "current_file", None):
+            self.time_current_label.setText(tr("time_default"))
+            self.time_total_label.setText(tr("time_default"))
 
         rtl = is_rtl()
         self.lbl_users.setText(tr("section_users"))
@@ -1668,7 +1701,7 @@ class NeonSyncsWindow(QWidget):
             self.server_container.show()
 
     def do_create_room(self):
-        user = self.input_user.text().strip() or tr("default_username", id=random.randint(1000, 9999))
+        user = self.input_user.text().strip() or self._format_default_user()
         password = self.input_password.text()
         self.last_p2p_action = ("create", user, password)
         self.btn_retry_p2p.hide()
@@ -1680,9 +1713,9 @@ class NeonSyncsWindow(QWidget):
     def do_join_room(self):
         room_id = self.input_room_id.text().strip()
         if not room_id:
-            self.set_status("status_error", state="error", message=tr("error_room_id_required"))
+            self.set_status("status_error", state="error", message="error_room_id_required")
             return
-        user = self.input_user.text().strip() or tr("default_username", id=random.randint(1000, 9999))
+        user = self.input_user.text().strip() or self._format_default_user()
         password = self.input_password.text()
         self.last_p2p_action = ("join", room_id, user, password)
         self.btn_retry_p2p.hide()
@@ -1722,8 +1755,12 @@ class NeonSyncsWindow(QWidget):
         text = self.input_my_room_id.text().strip()
         if text:
             QApplication.clipboard().setText(text)
+            self._id_copied = True
             self.btn_copy_id.setText(tr("id_copied"))
-            QTimer.singleShot(2000, lambda: self.btn_copy_id.setText(tr("copy_id")))
+            def _reset():
+                self._id_copied = False
+                self.btn_copy_id.setText(tr("copy_id"))
+            QTimer.singleShot(2000, _reset)
 
     def do_connect(self):
         if self.net_server.running:
@@ -1739,8 +1776,8 @@ class NeonSyncsWindow(QWidget):
             port = int(self.input_port.text().strip())
         except ValueError:
             port = 8999
-        room = self.input_room.text().strip()
-        user = self.input_user.text().strip() or "invite"
+        room = self.input_room.text().strip() or self._format_default_room()
+        user = self.input_user.text().strip() or self._format_default_user()
         password = self.input_password.text()
         self.net_server.connect_to(host, port, room, user, password)
 
@@ -1758,8 +1795,7 @@ class NeonSyncsWindow(QWidget):
                 self.btn_connect.style().unpolish(self.btn_connect)
                 self.btn_connect.style().polish(self.btn_connect)
         else:
-            friendly_msg = tr(message)
-            self.set_status("status_error", state="error", message=friendly_msg)
+            self.set_status("status_error", state="error", message=message)
             if self.combo_mode.currentIndex() == 0:  # P2P
                 self.btn_create_room.setEnabled(True)
                 self.btn_join_room.setEnabled(True)

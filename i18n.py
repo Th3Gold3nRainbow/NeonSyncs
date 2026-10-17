@@ -231,6 +231,11 @@ def is_rtl() -> bool:
     return _CURRENT_LANGUAGE == "ar"
 
 
+def has_key(key: str) -> bool:
+    """Returns True if the key exists in translation catalogs."""
+    return key in _CATALOGS.get("en", {})
+
+
 def tr(key: str, **params: Any) -> str:
     """Translates a key into the active language, falling back to English.
     Interpolates format parameters safely.

@@ -150,9 +150,9 @@ def check_retranslate_ui():
     required_retranslate_targets = [
         "setWindowTitle", "btn_open", "btn_back30", "btn_back10", "btn_play",
         "btn_fwd10", "btn_fwd30", "btn_fullscreen", "lbl_conn", "combo_mode",
-        "lbl_user", "lbl_password", "input_password", "btn_create_room",
+        "lbl_user", "lbl_password", "input_password", "input_user", "btn_create_room",
         "lbl_room_id", "input_room_id", "btn_join_room", "btn_copy_id",
-        "btn_leave_p2p", "btn_retry_p2p", "lbl_host", "lbl_port", "lbl_room",
+        "btn_leave_p2p", "btn_retry_p2p", "lbl_host", "lbl_port", "lbl_room", "input_room",
         "btn_connect", "status_label", "lbl_users", "lbl_chat", "chat_input",
         "btn_send", "refresh_chat_display"
     ]
@@ -183,6 +183,164 @@ def check_retranslate_ui():
     return errors
 
 
+def check_hot_language_switch(catalogs):
+    """For each pair of languages (A -> B, 12 transitions), switches from A to B
+    and verifies that no UI string unique to A remains visible in the interface
+    (excluding brand names like NeonSyncs and URLs).
+    Also checks default input values (username, room name, status, placeholders)
+    and verifies that manual user edits are not overwritten upon language switch.
+    """
+    errors = []
+    if BASE_DIR not in sys.path:
+        sys.path.insert(0, BASE_DIR)
+
+    try:
+        import client
+        from PyQt5.QtWidgets import QApplication, QLabel, QPushButton, QLineEdit, QComboBox
+        from i18n import SUPPORTED_LANGUAGES, set_language, tr
+    except Exception as e:
+        return [f"Unable to import client or PyQt5 for hot switch test: {e}"]
+
+    try:
+        app = QApplication.instance() or QApplication([sys.argv[0]])
+        win = client.NeonSyncsWindow()
+    except Exception as e:
+        return [f"Failed to instantiate NeonSyncsWindow: {e}"]
+
+    # Proper names, invariant technical strings, and media symbols
+    allowed_invariants = {
+        "NeonSyncs", "neonsyncs.com", "https://neonsyncs.com",
+        "127.0.0.1", "8999", "0:00",
+        "10s ⏩", "30s ⏩", "⏪ 10s", "⏪ 30s",
+        "English", "Français", "Русский", "العربية"
+    }
+
+    def collect_ui_texts(window):
+        items = {}
+        if window.windowTitle():
+            items["windowTitle"] = window.windowTitle()
+        for idx, child in enumerate(window.findChildren(QLabel)):
+            txt = child.text()
+            if txt:
+                items[f"QLabel_{child.objectName() or idx}"] = txt
+        for idx, child in enumerate(window.findChildren(QPushButton)):
+            txt = child.text()
+            if txt:
+                items[f"QPushButton_{child.objectName() or idx}"] = txt
+        for idx, child in enumerate(window.findChildren(QLineEdit)):
+            txt = child.text()
+            if txt:
+                items[f"QLineEdit_text_{child.objectName() or idx}"] = txt
+            ph = child.placeholderText()
+            if ph:
+                items[f"QLineEdit_ph_{child.objectName() or idx}"] = ph
+        for idx, child in enumerate(window.findChildren(QComboBox)):
+            if child is not window.combo_lang:
+                for i in range(child.count()):
+                    items[f"QComboBox_{child.objectName() or idx}_{i}"] = child.itemText(i)
+        return items
+
+    # 1. Test all 12 pairwise transitions
+    for lang_a in SUPPORTED_LANGS:
+        for lang_b in SUPPORTED_LANGS:
+            if lang_a == lang_b:
+                continue
+
+            # Start in language A
+            set_language(lang_a)
+            win.retranslate_ui()
+
+            # Switch hot to language B
+            set_language(lang_b)
+            win.retranslate_ui()
+
+            # Check default username
+            expected_user = tr("default_username", id=win._default_suffix)
+            if win.input_user.text() != expected_user:
+                errors.append(
+                    f"[{lang_a} -> {lang_b}] input_user has '{win.input_user.text()}', expected '{expected_user}'"
+                )
+
+            # Check default room name
+            expected_room = tr("default_room_name", id=win._default_room_suffix)
+            if win.input_room.text() != expected_room:
+                errors.append(
+                    f"[{lang_a} -> {lang_b}] input_room has '{win.input_room.text()}', expected '{expected_room}'"
+                )
+
+            # Check default status
+            expected_status = tr("status_disconnected")
+            if win.status_label.text() != expected_status:
+                errors.append(
+                    f"[{lang_a} -> {lang_b}] status_label has '{win.status_label.text()}', expected '{expected_status}'"
+                )
+
+            # Collect all UI texts in language B
+            ui_items = collect_ui_texts(win)
+
+            # Verify no string unique to language A remains
+            for widget_id, val in ui_items.items():
+                if val in allowed_invariants or val.startswith("<span") or val.startswith("<a href="):
+                    continue
+
+                for k, t_a in catalogs.get(lang_a, {}).items():
+                    t_b = catalogs.get(lang_b, {}).get(k, "")
+                    if t_a != t_b:
+                        if "{" in t_a:
+                            prefix_a = t_a.split("{")[0]
+                            prefix_b = t_b.split("{")[0]
+                            if prefix_a and len(prefix_a) >= 3 and prefix_a in val and prefix_a != prefix_b:
+                                errors.append(
+                                    f"[{lang_a} -> {lang_b}] {widget_id} contains old language {lang_a} "
+                                    f"prefix '{prefix_a}' from key '{k}': '{val}'"
+                                )
+                        else:
+                            if val == t_a and t_a not in allowed_invariants:
+                                errors.append(
+                                    f"[{lang_a} -> {lang_b}] {widget_id} displays untranslated text from {lang_a} "
+                                    f"for key '{k}': '{val}' (should be '{t_b}')"
+                                )
+
+    # 2. Test manual typing and clearing behavior
+    win.input_user.setText("CustomPlayer42")
+    win._on_user_text_edited("CustomPlayer42")
+    if win._username_is_default:
+        errors.append("Flag _username_is_default should be False after user edits text")
+
+    set_language("fr")
+    win.retranslate_ui()
+    if win.input_user.text() != "CustomPlayer42":
+        errors.append(f"Custom username was overwritten on language switch: '{win.input_user.text()}'")
+
+    win.input_user.setText("")
+    win._on_user_text_edited("")
+    if not win._username_is_default:
+        errors.append("Flag _username_is_default should be True after clearing field")
+    expected_default_fr = tr("default_username", id=win._default_suffix)
+    if win.input_user.text() != expected_default_fr:
+        errors.append(f"Cleared username did not regenerate default: '{win.input_user.text()}' (expected '{expected_default_fr}')")
+
+    set_language("ru")
+    win.retranslate_ui()
+    expected_default_ru = tr("default_username", id=win._default_suffix)
+    if win.input_user.text() != expected_default_ru:
+        errors.append(f"Regenerated username was not translated to Russian: '{win.input_user.text()}'")
+
+    # 3. Test dynamic error status translation
+    win.set_status("status_error", state="error", message="error_room_id_required")
+    set_language("en")
+    win.retranslate_ui()
+    if "Room ID is required" not in win.status_label.text():
+        errors.append(f"Error status was not retranslated to English: '{win.status_label.text()}'")
+
+    set_language("fr")
+    win.retranslate_ui()
+    if "requis" not in win.status_label.text():
+        errors.append(f"Error status was not retranslated to French: '{win.status_label.text()}'")
+
+    return errors
+
+
 def main():
     print("=" * 60)
     print("NeonSyncs Internationalization (i18n) Linter")
@@ -191,8 +349,9 @@ def main():
     cat_errors, catalogs = check_catalogs()
     code_errors = check_hardcoded_strings()
     retranslate_errors = check_retranslate_ui()
+    hot_switch_errors = check_hot_language_switch(catalogs)
 
-    all_errors = cat_errors + code_errors + retranslate_errors
+    all_errors = cat_errors + code_errors + retranslate_errors + hot_switch_errors
 
     if all_errors:
         print(f"\nFAILED: Found {len(all_errors)} i18n issue(s):\n")
@@ -206,6 +365,9 @@ def main():
         print(f"  - [{lang}] {len(catalogs.get(lang, {}))} keys verified")
     print("  - client.py: No hardcoded user-visible UI strings detected.")
     print("  - client.py: retranslate_ui() verified (all visible UI widgets covered).")
+    print("  - client.py: Hot language switching tested across all 12 language pairs (EN, FR, RU, AR).")
+    print("  - client.py: Default username & room name retranslation and user edit persistence verified.")
+    print("  - client.py: Dynamic status bar retranslation verified.")
     sys.exit(0)
 
 
