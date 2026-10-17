@@ -29,6 +29,10 @@ Avancer / reculer :
   - Flèches gauche/droite (±10s) et haut/bas (±60s) du clavier,
     liées explicitement (fiables même quand la vidéo a le focus),
     synchronisées avec les autres participants.
+  - Barre de progression glissable (au-dessus des boutons) : cliquez
+    ou faites-la glisser pour aller directement où vous voulez dans
+    la vidéo. Synchronisée avec les autres participants dès que vous
+    relâchez.
 
 Mot de passe serveur :
   - Champ optionnel dans le panneau de connexion.
@@ -38,6 +42,7 @@ Mot de passe serveur :
     et remplissez le même mot de passe côté client.
 """
 import sys
+import os
 import json
 import socket
 import threading
@@ -46,12 +51,182 @@ import time
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QLabel, QFileDialog, QListWidget, QSplitter, QFrame,
-    QShortcut
+    QShortcut, QSlider, QComboBox
 )
-from PyQt5.QtGui import QKeySequence
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
+from PyQt5.QtGui import QKeySequence, QIcon
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QUrl, pyqtSlot
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtWebChannel import QWebChannel
+
+if sys.platform == "win32":
+    _dll_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
+    if os.path.exists(_dll_dir):
+        os.environ["PATH"] = _dll_dir + os.pathsep + os.environ.get("PATH", "")
+        if hasattr(os, "add_dll_directory"):
+            try:
+                os.add_dll_directory(_dll_dir)
+            except Exception:
+                pass
 
 import mpv
+
+
+# ---------------------------------------------------------------------------
+# Internationalisation — la langue choisie a l'installation (ecrite par
+# l'installateur Inno Setup dans "lang.txt", a cote de l'executable) est
+# lue ici. Par defaut : francais si le fichier est absent (ex: lancement
+# depuis les sources sans passer par l'installateur).
+# ---------------------------------------------------------------------------
+STRINGS = {
+    "fr": {
+        "window_title": "SyncMPV — lecture synchronisée",
+        "open_file": "Ouvrir un fichier…",
+        "back_30": "⏪ 30s",
+        "back_10": "⏪ 10s",
+        "play_pause": "Lecture / Pause",
+        "fwd_10": "10s ⏩",
+        "fwd_30": "30s ⏩",
+        "fullscreen": "Plein écran (F11)",
+        "section_server": "SERVEUR",
+        "label_host": "Hôte",
+        "label_port": "Port",
+        "label_room": "Salon",
+        "label_user": "Pseudo",
+        "label_password": "Mot de passe",
+        "password_placeholder": "(optionnel)",
+        "connect": "Se connecter",
+        "disconnect": "Se déconnecter",
+        "status_disconnected": "Déconnecté",
+        "status_connected": "Connecté",
+        "status_error": "Erreur : {message}",
+        "status_disconnected_lost": "Déconnecté (connexion perdue)",
+        "section_users": "UTILISATEURS",
+        "section_chat": "CHAT",
+        "chat_placeholder": "Écrire un message…",
+        "send": "Envoyer",
+        "chat_not_connected": "⚠ Non connecté — connectez-vous d'abord à un salon ou un serveur.",
+        "mode_p2p": "P2P (recommandé)",
+        "mode_server": "Serveur",
+        "create_room": "Créer un salon",
+        "join_room": "Rejoindre",
+        "room_id": "ID du salon",
+        "room_id_placeholder": "ex: syncmpv-xxxxxx",
+        "copy_id": "Copier",
+        "id_copied": "Copié !",
+        "status_reconnecting": "Reconnexion…",
+        "status_creating": "Création du salon…",
+        "status_joining": "Connexion au salon…",
+        "host_left": "L'hôte a quitté le salon",
+        "p2p_error_signaling": "Serveur de signalement injoignable",
+        "p2p_error_no_turn": "Connexion impossible (probable NAT sans TURN)",
+        "p2p_error_peer_unavailable": "Salon introuvable ou hôte déconnecté",
+        "error_wrong_password": "Mot de passe incorrect",
+        "p2p_error_connection_failed": "Échec de connexion (délai dépassé ou NAT strict)",
+        "p2p_retry": "Réessayer",
+        "section_connection": "CONNEXION",
+        "label_mode": "Mode",
+        "leave_room": "Quitter le salon",
+        "warning_no_file": "Aucun fichier ouvert. L'hôte lit : {file}",
+        "warning_different_file": "Fichier différent de l'hôte ({details}) — synchronisation suspendue.",
+    },
+    "en": {
+        "window_title": "SyncMPV — synchronized playback",
+        "open_file": "Open a file…",
+        "back_30": "⏪ 30s",
+        "back_10": "⏪ 10s",
+        "play_pause": "Play / Pause",
+        "fwd_10": "10s ⏩",
+        "fwd_30": "30s ⏩",
+        "fullscreen": "Fullscreen (F11)",
+        "section_server": "SERVER",
+        "label_host": "Host",
+        "label_port": "Port",
+        "label_room": "Room",
+        "label_user": "Username",
+        "label_password": "Password",
+        "password_placeholder": "(optional)",
+        "connect": "Connect",
+        "disconnect": "Disconnect",
+        "status_disconnected": "Disconnected",
+        "status_connected": "Connected",
+        "status_error": "Error: {message}",
+        "status_disconnected_lost": "Disconnected (connection lost)",
+        "section_users": "USERS",
+        "section_chat": "CHAT",
+        "chat_placeholder": "Type a message…",
+        "send": "Send",
+        "chat_not_connected": "⚠ Not connected — connect to a room or server first.",
+        "mode_p2p": "P2P (recommended)",
+        "mode_server": "Server",
+        "create_room": "Create Room",
+        "join_room": "Join",
+        "room_id": "Room ID",
+        "room_id_placeholder": "e.g. syncmpv-xxxxxx",
+        "copy_id": "Copy",
+        "id_copied": "Copied!",
+        "status_reconnecting": "Reconnecting…",
+        "status_creating": "Creating room…",
+        "status_joining": "Joining room…",
+        "host_left": "Host left the room",
+        "p2p_error_signaling": "Signaling server unreachable",
+        "p2p_error_no_turn": "Connection failed (probable NAT without TURN)",
+        "p2p_error_peer_unavailable": "Room not found or host disconnected",
+        "error_wrong_password": "Incorrect password",
+        "p2p_error_connection_failed": "Connection failed (timeout or strict NAT)",
+        "p2p_retry": "Retry",
+        "section_connection": "CONNECTION",
+        "label_mode": "Mode",
+        "leave_room": "Leave Room",
+        "warning_no_file": "No file open. Host is playing: {file}",
+        "warning_different_file": "Different file from host ({details}) — sync suspended.",
+    },
+}
+
+
+def _base_dir():
+    """Dossier contenant l'executable (ou le script, si lance depuis les
+    sources) — c'est la ou l'installateur place icon.ico et lang.txt."""
+    return os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
+
+
+def _get_asset_path(rel_path):
+    """Trouve un fichier inclus dans le bundle PyInstaller ou dans le dossier source."""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        p = os.path.join(sys._MEIPASS, rel_path)
+        if os.path.exists(p):
+            return p
+    p = os.path.join(_base_dir(), rel_path)
+    if os.path.exists(p):
+        return p
+    return os.path.abspath(rel_path)
+
+
+def _detect_language():
+    """Langue choisie a l'installation (fichier lang.txt ecrit par Inno
+    Setup a cote de l'executable), sinon francais par defaut."""
+    try:
+        lang_file = os.path.join(_base_dir(), "lang.txt")
+        with open(lang_file, "r", encoding="utf-8") as f:
+            content = f.read().strip().lower()
+        if "english" in content or content == "en":
+            return "en"
+        if "french" in content or content == "fr":
+            return "fr"
+    except Exception:
+        pass
+    return "fr"
+
+
+LANG = _detect_language()
+
+ICON_PATH = os.path.join(_base_dir(), "icon.ico")
+
+
+def tr(key, **kwargs):
+    text = STRINGS.get(LANG, STRINGS["fr"]).get(key, key)
+    if kwargs:
+        return text.format(**kwargs)
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +252,18 @@ QLabel[role="status"] {
     color: #e4e6eb;
     font-weight: 600;
     padding: 4px 0;
+}
+QLabel[role="status"][state="connected"] {
+    color: #39f2c8;
+}
+QLabel[role="status"][state="error"] {
+    color: #f56565;
+}
+QLabel[role="status"][state="reconnecting"] {
+    color: #f6ad55;
+}
+QLabel[role="status"][state="disconnected"] {
+    color: #7b8394;
 }
 QLineEdit {
     background-color: #161a22;
@@ -112,6 +299,39 @@ QPushButton[role="primary"] {
 }
 QPushButton[role="primary"]:hover {
     background-color: #14403a;
+}
+QPushButton[role="small"] {
+    padding: 6px 10px;
+    font-size: 9pt;
+}
+QPushButton[role="danger"] {
+    background-color: #2a1215;
+    border: 1px solid #e05252;
+    color: #e05252;
+}
+QPushButton[role="danger"]:hover {
+    background-color: #38181c;
+}
+QComboBox {
+    background-color: #161a22;
+    border: 1px solid #242a35;
+    border-radius: 6px;
+    padding: 6px 9px;
+    color: #e4e6eb;
+}
+QComboBox:focus, QComboBox:hover {
+    border: 1px solid #39f2c8;
+}
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox QAbstractItemView {
+    background-color: #161a22;
+    border: 1px solid #242a35;
+    selection-background-color: #14403a;
+    selection-color: #39f2c8;
+    color: #e4e6eb;
 }
 QListWidget {
     background-color: #10131a;
@@ -155,6 +375,37 @@ QWidget#panel {
 QWidget#controlsBar {
     background-color: #0e1016;
 }
+QLabel#timeLabel {
+    color: #9aa0ac;
+    font-size: 9pt;
+    min-width: 48px;
+}
+QSlider::groove:horizontal {
+    height: 5px;
+    background: #1c2028;
+    border-radius: 2px;
+}
+QSlider::sub-page:horizontal {
+    height: 5px;
+    background: #39f2c8;
+    border-radius: 2px;
+}
+QSlider::add-page:horizontal {
+    height: 5px;
+    background: #1c2028;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    background: #e4e6eb;
+    border: 2px solid #39f2c8;
+    border-radius: 7px;
+}
+QSlider::handle:horizontal:hover {
+    background: #39f2c8;
+}
 """
 
 
@@ -184,6 +435,21 @@ STATE_SEND_INTERVAL = 3.0  # envoi périodique de l'état même sans événement
 IGNORE_ECHO_WINDOW = 0.8   # évite de renvoyer un état qu'on vient de recevoir
 MIN_CORRECTION_INTERVAL = 2.0  # anti-rebond : pas 2 corrections en moins de 2s
 BIG_JUMP_THRESHOLD = 10.0      # au-dela, on corrige immediatement (vrai seek)
+SEEK_BAR_RESOLUTION = 2000     # precision interne de la barre de progression
+PROGRESS_UPDATE_INTERVAL = 400  # ms entre deux rafraichissements de la barre
+
+
+def format_time(seconds):
+    """Formate des secondes en 'm:ss' ou 'h:mm:ss'."""
+    try:
+        seconds = max(0, int(seconds))
+    except (TypeError, ValueError):
+        seconds = 0
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
 
 
 class NetworkClient(QObject):
@@ -272,20 +538,221 @@ class NetworkClient(QObject):
                 pass
 
 
+class P2PBridge(QObject):
+    """Pont de communication entre JavaScript (PeerJS) et Python via QWebChannel."""
+    def __init__(self, client):
+        super().__init__()
+        self.client = client
+
+    @pyqtSlot()
+    def onBridgeReady(self):
+        self.client._on_bridge_ready()
+
+    @pyqtSlot(str)
+    def onRoomCreated(self, room_id):
+        self.client._on_room_created(room_id)
+
+    @pyqtSlot(str)
+    def onConnectionState(self, state):
+        self.client._on_connection_state(state)
+
+    @pyqtSlot(float, float)
+    def onClockSync(self, offset_ms, rtt_ms):
+        self.client._on_clock_sync(offset_ms, rtt_ms)
+
+    @pyqtSlot(str)
+    def onMessage(self, msg_str):
+        self.client._on_message(msg_str)
+
+    @pyqtSlot(str)
+    def onError(self, err_msg):
+        self.client._on_error(err_msg)
+
+    @pyqtSlot(str, str)
+    def onPeerJoined(self, peer_id, username):
+        self.client._on_peer_joined(peer_id, username)
+
+    @pyqtSlot(str)
+    def onPeerLeft(self, peer_id):
+        pass
+
+    @pyqtSlot(str)
+    def jsLog(self, msg):
+        role = "HOST" if getattr(self.client, 'is_host', False) else "GUEST"
+        print(f"[JS {role}] {msg}")
+
+
+class P2PClient(QObject):
+    """Gère la connexion P2P WebRTC via PeerJS dans un QWebEngineView caché."""
+    message_received = pyqtSignal(dict)
+    connected_signal = pyqtSignal(bool, str)
+    disconnected_signal = pyqtSignal()
+    room_created_signal = pyqtSignal(str)
+    peer_joined_signal = pyqtSignal(str, str)
+    reconnecting_signal = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.running = False
+        self.estimated_latency = 0.0
+        self.clock_offset_ms = 0.0
+        self.rtt_ms = 0.0
+        self.is_host = False
+        self.bridge_ready = False
+        self.pending_action = None
+        self.current_room_id = None
+
+        self.view = QWebEngineView()
+        self.channel = QWebChannel()
+        self.bridge = P2PBridge(self)
+        self.channel.registerObject("bridge", self.bridge)
+        self.view.page().setWebChannel(self.channel)
+
+        html_path = _get_asset_path(os.path.join("p2p", "p2p.html"))
+        self.view.load(QUrl.fromLocalFile(os.path.abspath(html_path)))
+
+    def _on_bridge_ready(self):
+        self.bridge_ready = True
+        ice_path = _get_asset_path(os.path.join("p2p", "ice_servers.json"))
+        if os.path.exists(ice_path):
+            try:
+                with open(ice_path, "r", encoding="utf-8") as f:
+                    ice_json = f.read()
+                self.view.page().runJavaScript(f"window.p2p.setIceServers({json.dumps(ice_json)});")
+            except Exception:
+                pass
+
+        if self.pending_action:
+            action, args = self.pending_action
+            self.pending_action = None
+            if action == "create":
+                self.create_room(*args)
+            elif action == "join":
+                self.join_room(*args)
+
+    def create_room(self, username, password=""):
+        self.is_host = True
+        self.clock_offset_ms = 0.0
+        if not self.bridge_ready:
+            self.pending_action = ("create", (username, password))
+            return
+        self.view.page().runJavaScript(
+            f"window.p2p.createRoom({json.dumps(username)}, {json.dumps(password)});"
+        )
+
+    def join_room(self, room_id, username, password=""):
+        self.is_host = False
+        if not self.bridge_ready:
+            self.pending_action = ("join", (room_id, username, password))
+            return
+        self.view.page().runJavaScript(
+            f"window.p2p.joinRoom({json.dumps(room_id)}, {json.dumps(username)}, {json.dumps(password)});"
+        )
+
+    def send(self, obj: dict):
+        if not self.running and obj.get("type") != "hello":
+            return
+        try:
+            self.view.page().runJavaScript(f"window.p2p.send({json.dumps(obj)});" )
+        except Exception:
+            pass
+
+    def _on_room_created(self, room_id):
+        self.current_room_id = room_id
+        self.running = True
+        self.is_host = True
+        self.clock_offset_ms = 0.0
+        self.room_created_signal.emit(room_id)
+        self.connected_signal.emit(True, room_id)
+
+    def _on_clock_sync(self, offset_ms, rtt_ms):
+        self.clock_offset_ms = float(offset_ms)
+        self.rtt_ms = float(rtt_ms)
+        self.estimated_latency = (float(rtt_ms) / 2.0) / 1000.0
+
+    def get_host_time_ms(self):
+        """Retourne l'heure de référence de l'hôte en millisecondes."""
+        if self.is_host:
+            return time.time() * 1000.0
+        return (time.time() * 1000.0) + self.clock_offset_ms
+
+    def _on_connection_state(self, state):
+        if state == "connected":
+            self.running = True
+            self.connected_signal.emit(True, "connecté")
+        elif state == "reconnecting":
+            self.reconnecting_signal.emit()
+        elif state == "disconnected":
+            was_running = self.running
+            self.running = False
+            self.current_room_id = None
+            self.is_host = False
+            self.clock_offset_ms = 0.0
+            if was_running:
+                self.disconnected_signal.emit()
+
+    def _on_message(self, msg_str):
+        try:
+            msg = json.loads(msg_str)
+        except Exception:
+            return
+        if msg.get("type") == "pong":
+            try:
+                rtt = time.time() - float(msg.get("t", 0))
+                if 0 <= rtt < 5:
+                    one_way = rtt / 2
+                    self.estimated_latency = 0.7 * self.estimated_latency + 0.3 * one_way
+            except (TypeError, ValueError):
+                pass
+            return
+        self.message_received.emit(msg)
+
+    def _on_peer_joined(self, peer_id, username):
+        self.peer_joined_signal.emit(peer_id, username)
+
+    def _on_error(self, err_msg):
+        self.running = False
+        self.connected_signal.emit(False, err_msg)
+
+    def close(self):
+        was_running = self.running
+        self.running = False
+        self.current_room_id = None
+        self.is_host = False
+        self.clock_offset_ms = 0.0
+        if self.bridge_ready:
+            self.view.page().runJavaScript("window.p2p.leave();")
+        if was_running:
+            self.disconnected_signal.emit()
+
+
 class SyncMPVWindow(QWidget):
     fs_toggle_requested = pyqtSignal()
     fs_exit_requested = pyqtSignal()
     seek_requested = pyqtSignal(float)
+    pause_toggle_requested = pyqtSignal()
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SyncMPV — lecture synchronisée")
+        self.setWindowTitle(tr("window_title"))
+        if os.path.exists(ICON_PATH):
+            self.setWindowIcon(QIcon(ICON_PATH))
         self.resize(1100, 650)
 
-        self.net = NetworkClient()
-        self.net.message_received.connect(self.on_message)
-        self.net.connected_signal.connect(self.on_connected)
-        self.net.disconnected_signal.connect(self.on_disconnected)
+        self.net_server = NetworkClient()
+        self.net_p2p = P2PClient(self)
+        self.active_net = self.net_p2p
+
+        self.net_server.message_received.connect(self.on_message)
+        self.net_server.connected_signal.connect(self.on_connected)
+        self.net_server.disconnected_signal.connect(self.on_disconnected)
+
+        self.net_p2p.message_received.connect(self.on_message)
+        self.net_p2p.connected_signal.connect(self.on_connected)
+        self.net_p2p.disconnected_signal.connect(self.on_disconnected)
+        self.net_p2p.room_created_signal.connect(self.on_room_created)
+        self.net_p2p.peer_joined_signal.connect(self.on_peer_joined)
+        self.net_p2p.reconnecting_signal.connect(self.on_reconnecting)
 
         self.last_remote_state_at = 0.0
         self.last_correction_at = 0.0
@@ -293,6 +760,9 @@ class SyncMPVWindow(QWidget):
         self.current_file = None
         self.current_duration = 0.0
         self.is_fullscreen = False
+        self.is_seeking_via_slider = False
+        self.shown_warnings = set()
+        self.scheduled_action_id = 0
 
         self._build_ui()
         self._init_mpv()
@@ -304,6 +774,7 @@ class SyncMPVWindow(QWidget):
         self.fs_toggle_requested.connect(self.toggle_fullscreen)
         self.fs_exit_requested.connect(self.exit_fullscreen)
         self.seek_requested.connect(self.seek_relative)
+        self.pause_toggle_requested.connect(self.toggle_pause)
 
         # Raccourcis clavier côté Qt (utile si le focus est hors de la
         # zone vidéo, par ex. sur le panneau latéral).
@@ -319,11 +790,41 @@ class SyncMPVWindow(QWidget):
         self.send_timer.timeout.connect(self.periodic_state_push)
         self.send_timer.start(int(STATE_SEND_INTERVAL * 1000))
 
+        self.progress_timer = QTimer(self)
+        self.progress_timer.timeout.connect(self.update_progress_ui)
+        self.progress_timer.start(PROGRESS_UPDATE_INTERVAL)
+
         # Mesure reguliere de la latence reseau (ping/pong), utilisee pour
         # compenser le retard des positions recues des autres participants.
         self.ping_timer = QTimer(self)
         self.ping_timer.timeout.connect(self.send_ping)
         self.ping_timer.start(2000)
+
+    @property
+    def net(self):
+        return self.active_net
+
+    def is_p2p_active(self):
+        return self.combo_mode.currentIndex() == 0 and self.net_p2p.running
+
+    def get_host_time_ms(self):
+        if self.is_p2p_active():
+            return self.net_p2p.get_host_time_ms()
+        return time.time() * 1000.0
+
+    def request_scheduled_action(self, action: str, target_time: float, paused: bool):
+        try:
+            duration = float(self.player.duration or self.current_duration or 0.0)
+        except Exception:
+            duration = 0.0
+        self.net.send({
+            "type": "action_request",
+            "action": action,
+            "targetTime": target_time,
+            "paused": paused,
+            "file": self.current_file,
+            "duration": duration,
+        })
 
     # ------------------------------------------------------------------
     # UI
@@ -345,20 +846,41 @@ class SyncMPVWindow(QWidget):
         # Barre de contrôle (masquée en plein écran)
         self.controls_widget = QWidget(self)
         self.controls_widget.setObjectName("controlsBar")
-        controls = QHBoxLayout(self.controls_widget)
-        self.btn_open = QPushButton("Ouvrir un fichier…")
+        controls_container = QVBoxLayout(self.controls_widget)
+        controls_container.setContentsMargins(10, 6, 10, 8)
+        controls_container.setSpacing(4)
+
+        # --- Barre de progression (glissable) + temps écoulé / durée ---
+        progress_row = QHBoxLayout()
+        self.time_current_label = QLabel("0:00")
+        self.time_current_label.setObjectName("timeLabel")
+        self.seek_slider = QSlider(Qt.Horizontal)
+        self.seek_slider.setRange(0, SEEK_BAR_RESOLUTION)
+        self.seek_slider.setValue(0)
+        self.seek_slider.sliderPressed.connect(self.on_slider_pressed)
+        self.seek_slider.sliderReleased.connect(self.on_slider_released)
+        self.time_total_label = QLabel("0:00")
+        self.time_total_label.setObjectName("timeLabel")
+        progress_row.addWidget(self.time_current_label)
+        progress_row.addWidget(self.seek_slider, stretch=1)
+        progress_row.addWidget(self.time_total_label)
+        controls_container.addLayout(progress_row)
+
+        # --- Boutons (ouvrir, avance/retour, lecture, plein écran) ---
+        controls = QHBoxLayout()
+        self.btn_open = QPushButton(tr("open_file"))
         self.btn_open.clicked.connect(self.open_file)
-        self.btn_back30 = QPushButton("⏪ 30s")
+        self.btn_back30 = QPushButton(tr("back_30"))
         self.btn_back30.clicked.connect(lambda: self.seek_relative(-30))
-        self.btn_back10 = QPushButton("⏪ 10s")
+        self.btn_back10 = QPushButton(tr("back_10"))
         self.btn_back10.clicked.connect(lambda: self.seek_relative(-10))
-        self.btn_play = QPushButton("Lecture / Pause")
+        self.btn_play = QPushButton(tr("play_pause"))
         self.btn_play.clicked.connect(self.toggle_pause)
-        self.btn_fwd10 = QPushButton("10s ⏩")
+        self.btn_fwd10 = QPushButton(tr("fwd_10"))
         self.btn_fwd10.clicked.connect(lambda: self.seek_relative(10))
-        self.btn_fwd30 = QPushButton("30s ⏩")
+        self.btn_fwd30 = QPushButton(tr("fwd_30"))
         self.btn_fwd30.clicked.connect(lambda: self.seek_relative(30))
-        self.btn_fullscreen = QPushButton("Plein écran (F11)")
+        self.btn_fullscreen = QPushButton(tr("fullscreen"))
         self.btn_fullscreen.clicked.connect(self.toggle_fullscreen)
         controls.addWidget(self.btn_open)
         controls.addWidget(self.btn_back30)
@@ -367,6 +889,8 @@ class SyncMPVWindow(QWidget):
         controls.addWidget(self.btn_fwd10)
         controls.addWidget(self.btn_fwd30)
         controls.addWidget(self.btn_fullscreen)
+        controls_container.addLayout(controls)
+
         left.addWidget(self.controls_widget)
 
         left_widget = QWidget(self)
@@ -381,53 +905,128 @@ class SyncMPVWindow(QWidget):
         right.setContentsMargins(14, 14, 14, 14)
         right.setSpacing(6)
 
-        lbl_server = QLabel("SERVEUR")
-        lbl_server.setProperty("role", "section")
-        right.addWidget(lbl_server)
+        lbl_conn = QLabel(tr("section_connection"))
+        lbl_conn.setProperty("role", "section")
+        right.addWidget(lbl_conn)
+
+        # Sélecteur de mode (P2P / Serveur)
+        self.combo_mode = QComboBox()
+        self.combo_mode.addItem(tr("mode_p2p"))
+        self.combo_mode.addItem(tr("mode_server"))
+        self.combo_mode.currentIndexChanged.connect(self.on_mode_changed)
+        right.addWidget(self.combo_mode)
+
+        # Champs communs (Pseudo & Mot de passe)
+        self.input_user = QLineEdit("invite")
+        self.input_password = QLineEdit()
+        self.input_password.setEchoMode(QLineEdit.Password)
+        self.input_password.setPlaceholderText(tr("password_placeholder"))
+
+        right.addWidget(QLabel(tr("label_user")))
+        right.addWidget(self.input_user)
+        right.addWidget(QLabel(tr("label_password")))
+        right.addWidget(self.input_password)
+
+        # --- Conteneur Mode P2P ---
+        self.p2p_container = QWidget()
+        p2p_layout = QVBoxLayout(self.p2p_container)
+        p2p_layout.setContentsMargins(0, 4, 0, 0)
+        p2p_layout.setSpacing(6)
+
+        self.btn_create_room = QPushButton(tr("create_room"))
+        self.btn_create_room.setProperty("role", "primary")
+        self.btn_create_room.clicked.connect(self.do_create_room)
+        p2p_layout.addWidget(self.btn_create_room)
+
+        p2p_layout.addWidget(QLabel(tr("room_id")))
+        join_row = QHBoxLayout()
+        self.input_room_id = QLineEdit()
+        self.input_room_id.setPlaceholderText(tr("room_id_placeholder"))
+        self.btn_join_room = QPushButton(tr("join_room"))
+        self.btn_join_room.clicked.connect(self.do_join_room)
+        join_row.addWidget(self.input_room_id, stretch=1)
+        join_row.addWidget(self.btn_join_room)
+        p2p_layout.addLayout(join_row)
+
+        self.room_info_widget = QWidget()
+        room_info_layout = QHBoxLayout(self.room_info_widget)
+        room_info_layout.setContentsMargins(0, 0, 0, 0)
+        room_info_layout.setSpacing(4)
+        self.input_my_room_id = QLineEdit()
+        self.input_my_room_id.setReadOnly(True)
+        self.btn_copy_id = QPushButton(tr("copy_id"))
+        self.btn_copy_id.setProperty("role", "small")
+        self.btn_copy_id.clicked.connect(self.copy_room_id)
+        room_info_layout.addWidget(self.input_my_room_id, stretch=1)
+        room_info_layout.addWidget(self.btn_copy_id)
+        self.room_info_widget.hide()
+        p2p_layout.addWidget(self.room_info_widget)
+
+        self.btn_leave_p2p = QPushButton(tr("leave_room"))
+        self.btn_leave_p2p.setProperty("role", "danger")
+        self.btn_leave_p2p.clicked.connect(self.do_leave_p2p)
+        self.btn_leave_p2p.hide()
+        p2p_layout.addWidget(self.btn_leave_p2p)
+
+        right.addWidget(self.p2p_container)
+
+        # --- Conteneur Mode Serveur ---
+        self.server_container = QWidget()
+        server_layout = QVBoxLayout(self.server_container)
+        server_layout.setContentsMargins(0, 4, 0, 0)
+        server_layout.setSpacing(6)
 
         self.input_host = QLineEdit("127.0.0.1")
         self.input_port = QLineEdit("8999")
         self.input_room = QLineEdit("salon1")
-        self.input_user = QLineEdit("invite")
-        self.input_password = QLineEdit()
-        self.input_password.setEchoMode(QLineEdit.Password)
-        self.input_password.setPlaceholderText("(optionnel)")
-        for w, label in [
-            (self.input_host, "Hôte"),
-            (self.input_port, "Port"),
-            (self.input_room, "Salon"),
-            (self.input_user, "Pseudo"),
-            (self.input_password, "Mot de passe"),
-        ]:
-            right.addWidget(QLabel(label))
-            right.addWidget(w)
 
-        self.btn_connect = QPushButton("Se connecter")
+        for w, label in [
+            (self.input_host, tr("label_host")),
+            (self.input_port, tr("label_port")),
+            (self.input_room, tr("label_room")),
+        ]:
+            server_layout.addWidget(QLabel(label))
+            server_layout.addWidget(w)
+
+        self.btn_connect = QPushButton(tr("connect"))
         self.btn_connect.setProperty("role", "primary")
         self.btn_connect.clicked.connect(self.do_connect)
-        right.addWidget(self.btn_connect)
+        server_layout.addWidget(self.btn_connect)
 
-        self.status_label = QLabel("Déconnecté")
+        self.server_container.hide()
+        right.addWidget(self.server_container)
+
+        # État de connexion
+        self.status_label = QLabel(tr("status_disconnected"))
         self.status_label.setProperty("role", "status")
+        self.status_label.setWordWrap(True)
         right.addWidget(self.status_label)
 
-        lbl_users = QLabel("UTILISATEURS")
+        self.btn_retry_p2p = QPushButton(tr("p2p_retry"))
+        self.btn_retry_p2p.setProperty("role", "small")
+        self.btn_retry_p2p.clicked.connect(self.retry_p2p_action)
+        self.btn_retry_p2p.hide()
+        right.addWidget(self.btn_retry_p2p)
+
+        # Utilisateurs
+        lbl_users = QLabel(tr("section_users"))
         lbl_users.setProperty("role", "section")
         right.addWidget(lbl_users)
         self.user_list = QListWidget()
         self.user_list.setMaximumHeight(110)
         right.addWidget(self.user_list)
 
-        lbl_chat = QLabel("CHAT")
+        # Chat
+        lbl_chat = QLabel(tr("section_chat"))
         lbl_chat.setProperty("role", "section")
         right.addWidget(lbl_chat)
         self.chat_list = QListWidget()
         right.addWidget(self.chat_list, stretch=1)
         chat_row = QHBoxLayout()
         self.chat_input = QLineEdit()
-        self.chat_input.setPlaceholderText("Écrire un message…")
+        self.chat_input.setPlaceholderText(tr("chat_placeholder"))
         self.chat_input.returnPressed.connect(self.send_chat)
-        btn_send = QPushButton("Envoyer")
+        btn_send = QPushButton(tr("send"))
         btn_send.clicked.connect(self.send_chat)
         chat_row.addWidget(self.chat_input)
         chat_row.addWidget(btn_send)
@@ -473,11 +1072,15 @@ class SyncMPVWindow(QWidget):
         # (inutile ici, puisqu'on est intégré via wid) : on désactive
         # d'abord ces raccourcis par défaut, puis on enregistre les nôtres,
         # pour éviter tout conflit.
-        for key in ("f", "F11", "MBTN_LEFT_DBL"):
+        for key in ("f", "F11", "MBTN_LEFT_DBL", "SPACE"):
             try:
                 self.player.command("keybind", key, "ignore")
             except Exception:
                 pass
+
+        @self.player.on_key_press("SPACE")
+        def _mpv_toggle_pause():
+            self.pause_toggle_requested.emit()
 
         @self.player.on_key_press("f")
         def _mpv_toggle_fs():
@@ -524,21 +1127,103 @@ class SyncMPVWindow(QWidget):
         if not path:
             return
         self.current_file = path
+        self.shown_warnings.clear()
         self.player.play(path)
-        self.push_state(force=True)
+        if self.is_p2p_active() and not self.net_p2p.is_host:
+            self.net.send({"type": "get_state"})
+        else:
+            self.push_state(force=True)
 
     def toggle_pause(self):
-        self.player.pause = not self.player.pause
+        new_paused = not bool(self.player.pause)
+        action = "pause" if new_paused else "play"
+        try:
+            current_pos = float(self.player.time_pos or 0.0)
+        except Exception:
+            current_pos = 0.0
+
+        if self.is_p2p_active():
+            self.request_scheduled_action(action, current_pos, new_paused)
+        else:
+            self.player.pause = new_paused
 
     def seek_relative(self, seconds: float):
         """Avance ou recule dans la vidéo (secondes positives = avance)."""
         try:
-            self.player.seek(seconds, reference="relative")
+            current_pos = float(self.player.time_pos or 0.0)
+            duration = float(self.player.duration or 0.0)
         except Exception:
+            current_pos, duration = 0.0, 0.0
+
+        now = time.time()
+        if hasattr(self, "_last_seek_req_time") and (now - self._last_seek_req_time < 0.6) and hasattr(self, "_last_seek_target"):
+            base_pos = self._last_seek_target
+        else:
+            base_pos = current_pos
+
+        target = max(0.0, base_pos + seconds)
+        if duration > 0:
+            target = min(target, duration)
+
+        self._last_seek_target = target
+        self._last_seek_req_time = now
+
+        if self.is_p2p_active():
+            paused = bool(self.player.pause)
+            self.request_scheduled_action("seek", target, paused)
+        else:
+            try:
+                self.player.seek(seconds, reference="relative")
+            except Exception:
+                return
+            self.push_state(force=True)
+
+    def on_slider_pressed(self):
+        # Pendant que l'utilisateur fait glisser la barre, on arrête de
+        # la mettre à jour automatiquement (sinon ça "combat" son geste).
+        self.is_seeking_via_slider = True
+
+    def on_slider_released(self):
+        self.is_seeking_via_slider = False
+        try:
+            duration = float(self.player.duration or 0.0)
+        except Exception:
+            duration = 0.0
+        if duration <= 0:
             return
-        # Synchronise immédiatement les autres participants, sans
-        # attendre l'événement 'seek' ou le prochain envoi périodique.
-        self.push_state(force=True)
+        fraction = self.seek_slider.value() / SEEK_BAR_RESOLUTION
+        target = max(0.0, min(fraction * duration, duration))
+
+        if self.is_p2p_active():
+            paused = bool(self.player.pause)
+            self.request_scheduled_action("seek", target, paused)
+        else:
+            try:
+                self.player.seek(target, reference="absolute")
+            except Exception:
+                return
+            self.push_state(force=True)
+
+    def update_progress_ui(self):
+        """Rafraîchit la barre de progression et les labels de temps.
+        N'est PAS appliqué pendant que l'utilisateur fait glisser la
+        barre lui-même (voir on_slider_pressed)."""
+        if self.is_seeking_via_slider:
+            return
+        try:
+            pos = float(self.player.time_pos or 0.0)
+            duration = float(self.player.duration or 0.0)
+        except Exception:
+            pos, duration = 0.0, 0.0
+
+        self.time_current_label.setText(format_time(pos))
+        self.time_total_label.setText(format_time(duration))
+
+        if duration > 0:
+            value = int((pos / duration) * SEEK_BAR_RESOLUTION)
+            self.seek_slider.blockSignals(True)
+            self.seek_slider.setValue(max(0, min(value, SEEK_BAR_RESOLUTION)))
+            self.seek_slider.blockSignals(False)
 
     def toggle_fullscreen(self):
         if self.is_fullscreen:
@@ -562,27 +1247,165 @@ class SyncMPVWindow(QWidget):
         self.controls_widget.show()
         self.showNormal()
 
-    def do_connect(self):
-        host = self.input_host.text().strip()
-        port = int(self.input_port.text().strip())
-        room = self.input_room.text().strip()
-        user = self.input_user.text().strip()
+    def set_status_state(self, state: str):
+        self.status_label.setProperty("state", state)
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
+
+    def on_mode_changed(self, index):
+        if self.active_net.running:
+            self.active_net.close()
+        self.user_list.clear()
+        self.btn_retry_p2p.hide()
+        self.set_status_state("disconnected")
+        self.status_label.setText(tr("status_disconnected"))
+        if index == 0:  # P2P
+            self.active_net = self.net_p2p
+            self.p2p_container.show()
+            self.server_container.hide()
+        else:  # Serveur
+            self.active_net = self.net_server
+            self.p2p_container.hide()
+            self.server_container.show()
+
+    def do_create_room(self):
+        user = self.input_user.text().strip() or "Hote"
         password = self.input_password.text()
-        self.net.connect_to(host, port, room, user, password)
+        self.last_p2p_action = ("create", user, password)
+        self.btn_retry_p2p.hide()
+        self.set_status_state("reconnecting")
+        self.status_label.setText(tr("status_creating"))
+        self.btn_create_room.setEnabled(False)
+        self.btn_join_room.setEnabled(False)
+        self.net_p2p.create_room(user, password)
+
+    def do_join_room(self):
+        room_id = self.input_room_id.text().strip()
+        if not room_id:
+            self.set_status_state("error")
+            self.status_label.setText(tr("status_error", message="ID du salon requis"))
+            return
+        user = self.input_user.text().strip() or "Invite"
+        password = self.input_password.text()
+        self.last_p2p_action = ("join", room_id, user, password)
+        self.btn_retry_p2p.hide()
+        self.set_status_state("reconnecting")
+        self.status_label.setText(tr("status_joining"))
+        self.btn_create_room.setEnabled(False)
+        self.btn_join_room.setEnabled(False)
+        self.net_p2p.join_room(room_id, user, password)
+
+    def retry_p2p_action(self):
+        self.btn_retry_p2p.hide()
+        if hasattr(self, "last_p2p_action") and self.last_p2p_action:
+            action = self.last_p2p_action[0]
+            if action == "create":
+                self.do_create_room()
+            elif action == "join":
+                self.do_join_room()
+
+    def do_leave_p2p(self):
+        self.net_p2p.close()
+        self.room_info_widget.hide()
+        self.btn_leave_p2p.hide()
+        self.btn_retry_p2p.hide()
+        self.btn_create_room.setEnabled(True)
+        self.btn_join_room.setEnabled(True)
+        self.set_status_state("disconnected")
+        self.status_label.setText(tr("status_disconnected"))
+        self.user_list.clear()
+
+    def on_room_created(self, room_id):
+        self.input_my_room_id.setText(room_id)
+        self.room_info_widget.show()
+        self.btn_leave_p2p.show()
+        self.btn_retry_p2p.hide()
+        self.btn_create_room.setEnabled(False)
+        self.btn_join_room.setEnabled(False)
+
+    def copy_room_id(self):
+        text = self.input_my_room_id.text().strip()
+        if text:
+            QApplication.clipboard().setText(text)
+            self.btn_copy_id.setText(tr("id_copied"))
+            QTimer.singleShot(2000, lambda: self.btn_copy_id.setText(tr("copy_id")))
+
+    def do_connect(self):
+        if self.net_server.running:
+            self.net_server.close()
+            self.btn_connect.setText(tr("connect"))
+            self.btn_connect.setProperty("role", "primary")
+            self.btn_connect.style().unpolish(self.btn_connect)
+            self.btn_connect.style().polish(self.btn_connect)
+            self.set_status_state("disconnected")
+            return
+        host = self.input_host.text().strip()
+        try:
+            port = int(self.input_port.text().strip())
+        except ValueError:
+            port = 8999
+        room = self.input_room.text().strip()
+        user = self.input_user.text().strip() or "invite"
+        password = self.input_password.text()
+        self.net_server.connect_to(host, port, room, user, password)
 
     def on_connected(self, ok, message):
-        self.status_label.setText("Connecté" if ok else f"Erreur: {message}")
+        if ok:
+            self.set_status_state("connected")
+            self.status_label.setText(tr("status_connected"))
+            self.btn_retry_p2p.hide()
+            if self.combo_mode.currentIndex() == 0:  # P2P
+                self.btn_leave_p2p.show()
+                self.btn_create_room.setEnabled(False)
+                self.btn_join_room.setEnabled(False)
+            else:  # Serveur
+                self.btn_connect.setText(tr("disconnect"))
+                self.btn_connect.setProperty("role", "danger")
+                self.btn_connect.style().unpolish(self.btn_connect)
+                self.btn_connect.style().polish(self.btn_connect)
+        else:
+            self.set_status_state("error")
+            friendly_msg = tr(message) if message in STRINGS.get(LANG, STRINGS["fr"]) else message
+            self.status_label.setText(tr("status_error", message=friendly_msg))
+            if self.combo_mode.currentIndex() == 0:  # P2P
+                self.btn_create_room.setEnabled(True)
+                self.btn_join_room.setEnabled(True)
+                self.btn_leave_p2p.hide()
+                self.room_info_widget.hide()
+                self.btn_retry_p2p.show()
+            else:
+                self.btn_connect.setText(tr("connect"))
+                self.btn_connect.setProperty("role", "primary")
+                self.btn_connect.style().unpolish(self.btn_connect)
+                self.btn_connect.style().polish(self.btn_connect)
+
+    def on_reconnecting(self):
+        self.set_status_state("reconnecting")
+        self.status_label.setText(tr("status_reconnecting"))
 
     def on_disconnected(self):
-        self.status_label.setText("Déconnecté (connexion perdue)")
+        self.set_status_state("disconnected")
+        self.status_label.setText(tr("status_disconnected_lost"))
         self.user_list.clear()
+        if self.combo_mode.currentIndex() == 0:  # P2P
+            self.btn_create_room.setEnabled(True)
+            self.btn_join_room.setEnabled(True)
+            self.btn_leave_p2p.hide()
+            self.room_info_widget.hide()
+            if hasattr(self, "last_p2p_action") and self.last_p2p_action:
+                self.btn_retry_p2p.show()
+        else:
+            self.btn_connect.setText(tr("connect"))
+            self.btn_connect.setProperty("role", "primary")
+            self.btn_connect.style().unpolish(self.btn_connect)
+            self.btn_connect.style().polish(self.btn_connect)
 
     def send_chat(self):
         text = self.chat_input.text().strip()
         if not text:
             return
         if not self.net.running:
-            self.chat_list.addItem("⚠ Non connecté — connectez-vous d'abord au serveur.")
+            self.chat_list.addItem(tr("chat_not_connected"))
             self.chat_list.scrollToBottom()
             return
         self.net.send({"type": "chat", "message": text})
@@ -602,26 +1425,41 @@ class SyncMPVWindow(QWidget):
             duration = float(self.player.duration or 0.0)
         except Exception:
             return
+        now_host_ms = self.get_host_time_ms()
         self.net.send({
             "type": "state",
             "paused": paused,
             "position": position,
             "file": self.current_file,
             "duration": duration,
+            "targetTime": position,
+            "executeAt": now_host_ms,
+            "periodic": not force,
         })
 
     def periodic_state_push(self):
         if self.net.running:
+            # En mode P2P, seul l'hôte diffuse l'état périodique (toutes les 3s)
+            if self.is_p2p_active() and not self.net_p2p.is_host:
+                return
             self.push_state()
 
     def send_ping(self):
         if self.net.running:
             self.net.send({"type": "ping", "t": time.time()})
 
+    def on_peer_joined(self, peer_id, username):
+        if self.is_p2p_active() and self.net_p2p.is_host:
+            # Un invité vient d'entrer : on lui transmet immédiatement notre état actuel
+            self.push_state(force=True)
+
     def on_message(self, msg: dict):
         mtype = msg.get("type")
         if mtype == "state":
             self.apply_remote_state(msg)
+        elif mtype == "get_state":
+            if self.is_p2p_active() and self.net_p2p.is_host:
+                self.push_state(force=True)
         elif mtype == "userlist":
             self.user_list.clear()
             self.user_list.addItems(msg.get("users", []))
@@ -629,21 +1467,161 @@ class SyncMPVWindow(QWidget):
             self.chat_list.addItem(f"{msg.get('from')}: {msg.get('message')}")
             self.chat_list.scrollToBottom()
         elif mtype == "error":
-            self.status_label.setText(f"Erreur: {msg.get('message', '')}")
+            self.status_label.setText(tr("status_error", message=msg.get('message', '')))
             self.net.close()
 
     def apply_remote_state(self, msg: dict):
-        remote_paused = msg.get("paused")
-        remote_position = msg.get("position")
-        remote_file = msg.get("file")
+        action = msg.get("action")
+        execute_at = msg.get("executeAt")
 
+        # En mode P2P, l'hôte est la source de référence pour la lecture :
+        # il n'applique pas les corrections de dérive périodiques ni les états passifs des invités.
+        # Seules les actions planifiées (play / pause / seek avec executeAt) sont exécutées.
+        if self.is_p2p_active() and self.net_p2p.is_host:
+            if not (action in ("play", "pause", "seek") and execute_at is not None):
+                return
+
+        # 1. Vérification fichier distinct (exigence 4)
+        remote_file = msg.get("file")
+        remote_duration = float(msg.get("duration") or 0.0)
+
+        if remote_file:
+            remote_base = os.path.basename(remote_file).lower()
+            local_base = os.path.basename(self.current_file).lower() if self.current_file else ""
+
+            if not self.current_file:
+                warn_key = f"no_file_{remote_base}"
+                if warn_key not in self.shown_warnings:
+                    self.shown_warnings.add(warn_key)
+                    self.chat_list.addItem(f"⚠ {tr('warning_no_file', file=os.path.basename(remote_file))}")
+                    self.chat_list.scrollToBottom()
+                return
+
+            name_diff = (remote_base != local_base)
+            try:
+                local_duration = float(self.player.duration or self.current_duration or 0.0)
+            except Exception:
+                local_duration = 0.0
+            duration_diff = (remote_duration > 0 and local_duration > 0 and abs(remote_duration - local_duration) > 2.0)
+
+            if name_diff or duration_diff:
+                warn_key = f"diff_{remote_base}_{local_base}"
+                if warn_key not in self.shown_warnings:
+                    self.shown_warnings.add(warn_key)
+                    reasons = []
+                    if name_diff:
+                        reasons.append(f"{os.path.basename(remote_file)} ≠ {os.path.basename(self.current_file)}")
+                    if duration_diff:
+                        reasons.append(f"{format_time(remote_duration)} ≠ {format_time(local_duration)}")
+                    self.chat_list.addItem(f"⚠ {tr('warning_different_file', details=', '.join(reasons))}")
+                    self.chat_list.scrollToBottom()
+                return  # Ne force PAS la synchronisation sur un fichier différent
+
+        # 2. Action planifiée (play / pause / seek avec executeAt) (exigence 2)
+        if action in ("play", "pause", "seek") and execute_at is not None:
+            host_now_ms = self.get_host_time_ms()
+            delay_ms = float(execute_at) - host_now_ms
+            delay_ms = max(0.0, min(delay_ms, 1000.0))
+
+            target_time = float(msg.get("targetTime", msg.get("position", 0.0)))
+            paused = msg.get("paused")
+
+            self.scheduled_action_id += 1
+            current_action_id = self.scheduled_action_id
+
+            def _execute_action():
+                if current_action_id != self.scheduled_action_id:
+                    return
+                self.applying_remote = True
+                try:
+                    try:
+                        self.player.seek(target_time, reference="absolute")
+                    except Exception:
+                        pass
+                    try:
+                        if paused is not None:
+                            self.player.pause = bool(paused)
+                        elif action == "play":
+                            self.player.pause = False
+                        elif action == "pause":
+                            self.player.pause = True
+                        self.player.speed = 1.0
+                    except Exception:
+                        pass
+                    self.last_correction_at = time.time()
+                    self._last_seek_target = target_time
+                finally:
+                    self.last_remote_state_at = time.time()
+                    QTimer.singleShot(400, lambda: setattr(self, "applying_remote", False))
+
+            if delay_ms <= 0:
+                _execute_action()
+            else:
+                QTimer.singleShot(int(delay_ms), _execute_action)
+            return
+
+        # 3. Correction de dérive sur state périodique (exigence 3)
+        if msg.get("periodic") and execute_at is not None:
+            remote_paused = msg.get("paused")
+            if remote_paused is not None and bool(remote_paused) != bool(self.player.pause):
+                self.player.pause = bool(remote_paused)
+                self.player.speed = 1.0
+
+            try:
+                local_pos = float(self.player.time_pos or 0.0)
+            except Exception:
+                local_pos = 0.0
+
+            if bool(self.player.pause):
+                target_time = float(msg.get("targetTime", msg.get("position", 0.0)))
+                if abs(local_pos - target_time) > SEEK_THRESHOLD:
+                    self.applying_remote = True
+                    self.player.seek(target_time, reference="absolute")
+                    self.player.speed = 1.0
+                    self.last_remote_state_at = time.time()
+                    QTimer.singleShot(400, lambda: setattr(self, "applying_remote", False))
+                return
+
+            now_host_sec = self.get_host_time_ms() / 1000.0
+            execute_at_sec = float(execute_at) / 1000.0
+            target_time = float(msg.get("targetTime", msg.get("position", 0.0)))
+            elapsed = max(0.0, now_host_sec - execute_at_sec)
+            theo_pos = target_time + elapsed
+
+            diff = theo_pos - local_pos
+            gap = abs(diff)
+
+            if gap < 0.05:
+                if self.player.speed != 1.0:
+                    self.player.speed = 1.0
+            elif gap < 1.0:
+                # Écart < 1s : ajustement fluide de vitesse (0.97 à 1.03) sans seek
+                if diff > 0:
+                    new_speed = min(1.03, 1.0 + max(0.01, diff * 0.04))
+                else:
+                    new_speed = max(0.97, 1.0 - max(0.01, gap * 0.04))
+                self.player.speed = round(new_speed, 3)
+            else:
+                # Écart >= 1s : seek direct
+                now = time.time()
+                if gap > BIG_JUMP_THRESHOLD or (now - self.last_correction_at > MIN_CORRECTION_INTERVAL):
+                    self.applying_remote = True
+                    try:
+                        self.player.seek(theo_pos, reference="absolute")
+                        self.player.speed = 1.0
+                        self.last_correction_at = now
+                    except Exception:
+                        pass
+                    finally:
+                        self.last_remote_state_at = now
+                        QTimer.singleShot(400, lambda: setattr(self, "applying_remote", False))
+            return
+
+        # 4. Fallback classique (mode Serveur ou message direct sans executeAt)
+        remote_position = msg.get("position")
+        remote_paused = msg.get("paused")
         self.applying_remote = True
         try:
-            if remote_file and remote_file != self.current_file:
-                self.current_file = remote_file
-                self.player.play(remote_file)
-                self.last_correction_at = 0.0  # nouveau fichier : pas de debounce
-
             if remote_position is not None:
                 try:
                     local_pos = float(self.player.time_pos or 0.0)
@@ -651,47 +1629,23 @@ class SyncMPVWindow(QWidget):
                     local_pos = 0.0
                 gap = abs(local_pos - remote_position)
                 now = time.time()
-
                 if gap > SEEK_THRESHOLD:
                     big_jump = gap > BIG_JUMP_THRESHOLD
                     time_since_last = now - self.last_correction_at
                     if big_jump or time_since_last > MIN_CORRECTION_INTERVAL:
-                        try:
-                            local_duration = float(self.player.duration or 0.0)
-                        except Exception:
-                            local_duration = 0.0
-                        # Si la position distante depasse la duree du fichier
-                        # local, les deux fichiers ne sont probablement PAS
-                        # strictement identiques (encodage/montage different
-                        # malgre le meme nom) : on n'essaie pas de corriger,
-                        # ca eviterait juste une boucle de rattrapage sans fin.
-                        if local_duration and remote_position > local_duration + 2.0:
-                            pass
-                        else:
-                            self.player.seek(remote_position, reference="absolute")
-                            self.last_correction_at = now
-
+                        self.player.seek(remote_position, reference="absolute")
+                        self.last_correction_at = now
             if remote_paused is not None:
                 self.player.pause = bool(remote_paused)
         except Exception:
             pass
         finally:
             self.last_remote_state_at = time.time()
-            # IMPORTANT : on ne remet PAS applying_remote a False ici,
-            # immediatement. Les evenements mpv ("seek", changement de
-            # "pause") declenches par NOS PROPRES appels ci-dessus
-            # arrivent de facon ASYNCHRONE, dans le thread interne de
-            # libmpv — parfois APRES la fin de cette fonction. Si on
-            # remettait le drapeau tout de suite, notre propre correction
-            # serait alors prise pour une action de l'utilisateur et
-            # rediffusee vers les autres participants, qui se
-            # corrigeraient a leur tour, etc. => boucle de correction
-            # sans fin (effet "ca replay en boucle"). On laisse donc un
-            # court delai avant de rouvrir la detection d'actions locales.
             QTimer.singleShot(400, lambda: setattr(self, "applying_remote", False))
 
     def closeEvent(self, event):
-        self.net.close()
+        self.net_server.close()
+        self.net_p2p.close()
         try:
             self.player.terminate()
         except Exception:
@@ -701,6 +1655,8 @@ class SyncMPVWindow(QWidget):
 
 def main():
     app = QApplication(sys.argv)
+    if os.path.exists(ICON_PATH):
+        app.setWindowIcon(QIcon(ICON_PATH))
     win = SyncMPVWindow()
     win.show()
     _apply_dark_titlebar(win)

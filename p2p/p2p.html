@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>SyncMPV P2P</title>
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <script src="peerjs.min.js"></script>
+</head>
+<body>
+<script>
+(function() {
+    "use strict";
+
+    // Alphabet for room IDs: no ambiguous chars (no 0/o, 1/l/i)
+    var ROOM_ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz";
+    var ROOM_PREFIX = "syncmpv-";
+
+    function generateRoomId() {
+        var code = "";
+        for (var i = 0; i < 6; i++) {
+            var idx = Math.floor(Math.random() * ROOM_ALPHABET.length);
+            code += ROOM_ALPHABET.charAt(idx);
+        }
+        return ROOM_PREFIX + code;
+    }
+
+    var DEFAULT_ICE_SERVERS = [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" }
+    ];
+
+    var state = {
+        role: null,           // "host" | "guest" | null
+        peer: null,
+        myUsername: "",
+        myPassword: "",
+        myRoomId: "",
+        guests: {},           // peerId -> { conn, username }
+        hostConn: null,       // guest mode: connection to host
+        iceServers: DEFAULT_ICE_SERVERS,
+        createAttempts: 0,
+        clockOffset: 0,
+        clockSyncInterval: null,
+        onClockPong: null
+    };
+
+    function log(msg) {
+        if (window.bridge && window.bridge.jsLog) {
+            window.bridge.jsLog(String(msg));
+        } else {
+            console.log("[P2P]", msg);
+        }
+    }
+
+    function initWebChannel() {
+        if (typeof QWebChannel === "undefined") {
+            console.error("QWebChannel is not defined!");
+            return;
+        }
+        if (typeof qt === "undefined" || !qt.webChannelTransport) {
+            console.error("qt.webChannelTransport is not available!");
+            return;
+        }
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+            window.bridge = channel.objects.bridge;
+            log("QWebChannel connected successfully.");
+            if (window.bridge && window.bridge.onBridgeReady) {
+                window.bridge.onBridgeReady();
+            }
+        });
+    }
+
+    // Star topology: broadcast userlist
+    function broadcastUserList() {
+        if (state.role !== "host") return;
+        var users = [state.myUsername];
+        for (var p in state.guests) {
+            if (state.guests.hasOwnProperty(p) && state.guests[p].username) {
+                users.push(state.guests[p].username);
+            }
+        }
+        var msg = { type: "userlist", users: users };
+        for (var pid in state.guests) {
+            if (state.guests.hasOwnProperty(pid)) {
+                try {
+                    state.guests[pid].conn.send(msg);
+                } catch (e) {
+                    log("Error sending userlist to " + pid + ": " + e);
+                }
+            }
+        }
+        if (window.bridge && window.bridge.onMessage) {
+            window.bridge.onMessage(JSON.stringify(msg));
+        }
+    }
+
+    // Horloge P2P (NTP-like) : 5 pings, garde la mesure au plus petit RTT
+    function runClockSync() {
+        if (state.role !== "guest" || !state.hostConn || !state.hostConn.open) return;
+        var samples = [];
+        var pingsSent = 0;
+        var maxPings = 5;
+
+        function sendPing() {
+            if (pingsSent >= maxPings) {
+                if (samples.length > 0) {
+                    var best = samples.reduce(function(min, s) {
+                        return s.rtt < min.rtt ? s : min;
+                    }, samples[0]);
+                    state.clockOffset = best.offset;
+                    log("Clock sync complete: best RTT=" + best.rtt + "ms, offset=" + best.offset + "ms");
+                    if (window.bridge && window.bridge.onClockSync) {
+                        window.bridge.onClockSync(best.offset, best.rtt);
+                    }
+                }
+                return;
+            }
+            pingsSent++;
+            var t0 = Date.now();
+            try {
+                state.hostConn.send({ type: "clock_ping", t0: t0 });
+            } catch (e) {
+                log("Failed to send clock_ping: " + e);
+            }
+        }
+
+        state.onClockPong = function(data) {
+            var t1 = Date.now();
+            var rtt = t1 - data.t0;
+            var offset = data.hostTime - (data.t0 + (rtt / 2));
+            samples.push({ rtt: rtt, offset: offset });
+            setTimeout(sendPing, 40);
+        };
+
+        sendPing();
+    }
+
+    window.p2p = {
+        setIceServers: function(serversJson) {
+            try {
+                if (typeof serversJson === "string") {
+                    var parsed = JSON.parse(serversJson);
+                    if (parsed.iceServers) state.iceServers = parsed.iceServers;
+                    else if (Array.isArray(parsed)) state.iceServers = parsed;
+                } else if (serversJson && serversJson.iceServers) {
+                    state.iceServers = serversJson.iceServers;
+                }
+            } catch (e) {
+                log("Failed to parse iceServers: " + e);
+            }
+        },
+
+        createRoom: function(username, password) {
+            window.p2p.leave();
+
+            state.role = "host";
+            state.myUsername = username || "Hote";
+            state.myPassword = password || "";
+            state.guests = {};
+            state.createAttempts = 0;
+
+            function tryCreate() {
+                state.createAttempts++;
+                if (state.createAttempts > 5) {
+                    if (window.bridge && window.bridge.onError) {
+                        window.bridge.onError("Impossible de générer un ID de salon unique après 5 tentatives.");
+                    }
+                    return;
+                }
+
+                var roomId = generateRoomId();
+                state.myRoomId = roomId;
+                log("Creating room with ID: " + roomId + " (attempt " + state.createAttempts + ")");
+
+                var peer = new Peer(roomId, {
+                    config: { iceServers: state.iceServers }
+                });
+                state.peer = peer;
+
+                peer.on("open", function(id) {
+                    log("Host peer opened with ID: " + id);
+                    if (window.bridge) {
+                        if (window.bridge.onRoomCreated) window.bridge.onRoomCreated(id);
+                        if (window.bridge.onConnectionState) window.bridge.onConnectionState("connected");
+                        if (window.bridge.onClockSync) window.bridge.onClockSync(0, 0);
+                    }
+                    broadcastUserList();
+                });
+
+                peer.on("connection", function(conn) {
+                    log("Incoming connection from: " + conn.peer);
+                    var peerId = conn.peer;
+
+                    conn.on("open", function() {
+                        log("Connection opened with guest: " + peerId);
+                    });
+
+                    conn.on("data", function(data) {
+                        if (!data) return;
+                        if (typeof data === "string") {
+                            try { data = JSON.parse(data); } catch (e) {}
+                        }
+
+                        // Handshake
+                        if (data.type === "hello") {
+                            var guestPass = data.password || "";
+                            if (state.myPassword && guestPass !== state.myPassword) {
+                                log("Invalid password from guest " + peerId);
+                                conn.send({ type: "error", error_code: "error_wrong_password", message: "Mot de passe incorrect" });
+                                setTimeout(function() { conn.close(); }, 200);
+                                return;
+                            }
+
+                            var guestUser = data.username || ("Invite_" + peerId.substr(0, 4));
+                            state.guests[peerId] = { conn: conn, username: guestUser };
+                            log("Guest registered: " + guestUser + " (" + peerId + ")");
+
+                            if (window.bridge && window.bridge.onPeerJoined) {
+                                window.bridge.onPeerJoined(peerId, guestUser);
+                            }
+                            broadcastUserList();
+                            return;
+                        }
+
+                        // Message relaying
+                        if (!state.guests[peerId]) {
+                            log("Ignored message from unauthenticated peer: " + peerId);
+                            return;
+                        }
+
+                        var senderName = state.guests[peerId].username;
+
+                        if (data.type === "clock_ping") {
+                            try {
+                                conn.send({ type: "clock_pong", t0: data.t0, hostTime: Date.now() });
+                            } catch (e) {}
+                            return;
+                        }
+
+                        if (data.type === "action_request") {
+                            var hostNow = Date.now();
+                            var scheduled = {
+                                type: "state",
+                                action: data.action,
+                                targetTime: data.targetTime,
+                                executeAt: hostNow + 500,
+                                paused: data.paused,
+                                position: data.targetTime,
+                                file: data.file,
+                                duration: data.duration,
+                                from: senderName
+                            };
+                            log("Host scheduling guest action: " + data.action + " at " + scheduled.executeAt);
+                            for (var p in state.guests) {
+                                if (state.guests.hasOwnProperty(p)) {
+                                    try { state.guests[p].conn.send(scheduled); } catch (e) {}
+                                }
+                            }
+                            if (window.bridge && window.bridge.onMessage) {
+                                window.bridge.onMessage(JSON.stringify(scheduled));
+                            }
+                            return;
+                        }
+
+                        if (data.type === "chat") {
+                            data.from = senderName;
+                            // Relay to all guests (including sender so their chat updates)
+                            for (var p in state.guests) {
+                                if (state.guests.hasOwnProperty(p)) {
+                                    try { state.guests[p].conn.send(data); } catch (e) {}
+                                }
+                            }
+                            // And notify host Python
+                            if (window.bridge && window.bridge.onMessage) {
+                                window.bridge.onMessage(JSON.stringify(data));
+                            }
+                        } else if (data.type === "state") {
+                            data.from = senderName;
+                            // Relay to all other guests
+                            for (var p in state.guests) {
+                                if (state.guests.hasOwnProperty(p) && p !== peerId) {
+                                    try { state.guests[p].conn.send(data); } catch (e) {}
+                                }
+                            }
+                            // And notify host Python
+                            if (window.bridge && window.bridge.onMessage) {
+                                window.bridge.onMessage(JSON.stringify(data));
+                            }
+                        } else if (data.type === "get_state") {
+                            if (window.bridge && window.bridge.onMessage) {
+                                window.bridge.onMessage(JSON.stringify(data));
+                            }
+                        } else if (data.type === "ping") {
+                            conn.send({ type: "pong", t: data.t, server_time: Date.now() / 1000.0 });
+                        }
+                    });
+
+                    conn.on("close", function() {
+                        log("Guest disconnected: " + peerId);
+                        if (state.guests[peerId]) {
+                            var u = state.guests[peerId].username;
+                            delete state.guests[peerId];
+                            if (window.bridge && window.bridge.onPeerLeft) {
+                                window.bridge.onPeerLeft(peerId);
+                            }
+                            broadcastUserList();
+                        }
+                    });
+
+                    conn.on("error", function(err) {
+                        log("Connection error with guest " + peerId + ": " + err);
+                    });
+                });
+
+                peer.on("error", function(err) {
+                    log("Peer error: " + err.type + " - " + err.message);
+                    if (err.type === "unavailable-id") {
+                        log("Room ID already in use, regenerating...");
+                        peer.destroy();
+                        setTimeout(tryCreate, 300);
+                        return;
+                    }
+                    var code = err.type;
+                    if (err.type === "server-error" || err.type === "socket-error" || err.type === "socket-closed" || err.type === "network") {
+                        code = "p2p_error_signaling";
+                    } else if (err.type === "webrtc" || err.type === "disconnected") {
+                        code = "p2p_error_no_turn";
+                    }
+                    if (window.bridge && window.bridge.onError) {
+                        window.bridge.onError(code);
+                    }
+                });
+
+                peer.on("disconnected", function() {
+                    log("Host disconnected from signaling server, attempting reconnect...");
+                    if (window.bridge && window.bridge.onConnectionState) {
+                        window.bridge.onConnectionState("reconnecting");
+                    }
+                    try { peer.reconnect(); } catch(e) {}
+                });
+            }
+
+            tryCreate();
+        },
+
+        joinRoom: function(roomId, username, password) {
+            window.p2p.leave();
+
+            state.role = "guest";
+            state.myUsername = username || "Invite";
+            state.myPassword = password || "";
+
+            // Normalize room ID: lowercase, ensure syncmpv- prefix
+            var cleanId = (roomId || "").trim().toLowerCase();
+            if (cleanId && cleanId.indexOf(ROOM_PREFIX) !== 0) {
+                cleanId = ROOM_PREFIX + cleanId;
+            }
+            state.myRoomId = cleanId;
+
+            log("Joining room: " + cleanId + " as " + state.myUsername);
+
+            var peer = new Peer({
+                config: { iceServers: state.iceServers }
+            });
+            state.peer = peer;
+
+            peer.on("open", function(myId) {
+                log("Guest peer opened with ID: " + myId + ", connecting to host: " + state.myRoomId);
+                var conn = peer.connect(state.myRoomId, {
+                    reliable: true
+                });
+                state.hostConn = conn;
+
+                conn.on("open", function() {
+                    log("Connected to host. Sending handshake...");
+                    conn.send({
+                        type: "hello",
+                        username: state.myUsername,
+                        password: state.myPassword
+                    });
+                    if (window.bridge && window.bridge.onConnectionState) {
+                        window.bridge.onConnectionState("connected");
+                    }
+                    setTimeout(runClockSync, 200);
+                    if (state.clockSyncInterval) clearInterval(state.clockSyncInterval);
+                    state.clockSyncInterval = setInterval(runClockSync, 30000);
+                });
+
+                conn.on("data", function(data) {
+                    if (!data) return;
+                    if (typeof data === "string") {
+                        try { data = JSON.parse(data); } catch (e) {}
+                    }
+
+                    if (data.type === "clock_pong") {
+                        if (state.onClockPong) state.onClockPong(data);
+                        return;
+                    }
+
+                    log("Received from host: " + (data.type || "unknown"));
+
+                    if (data.type === "error") {
+                        var errCode = data.error_code || data.message || "p2p_error_connection_failed";
+                        if (window.bridge && window.bridge.onError) {
+                            window.bridge.onError(errCode);
+                        }
+                        window.p2p.leave();
+                        return;
+                    }
+
+                    if (data.type === "host_left") {
+                        if (window.bridge && window.bridge.onError) {
+                            window.bridge.onError("host_left");
+                        }
+                        window.p2p.leave();
+                        return;
+                    }
+
+                    if (window.bridge && window.bridge.onMessage) {
+                        window.bridge.onMessage(JSON.stringify(data));
+                    }
+                });
+
+                conn.on("close", function() {
+                    log("Connection to host closed.");
+                    if (state.clockSyncInterval) {
+                        clearInterval(state.clockSyncInterval);
+                        state.clockSyncInterval = null;
+                    }
+                    if (window.bridge && window.bridge.onConnectionState) {
+                        window.bridge.onConnectionState("disconnected");
+                    }
+                });
+
+                conn.on("error", function(err) {
+                    log("Host connection error: " + err);
+                    if (window.bridge && window.bridge.onError) {
+                        window.bridge.onError("p2p_error_no_turn");
+                    }
+                });
+            });
+
+            peer.on("error", function(err) {
+                log("Guest peer error: " + err.type + " - " + err.message);
+                var code = err.type;
+                if (err.type === "peer-unavailable") {
+                    code = "p2p_error_peer_unavailable";
+                } else if (err.type === "server-error" || err.type === "socket-error" || err.type === "socket-closed" || err.type === "network") {
+                    code = "p2p_error_signaling";
+                } else if (err.type === "webrtc" || err.type === "disconnected") {
+                    code = "p2p_error_no_turn";
+                }
+                if (window.bridge && window.bridge.onError) {
+                    window.bridge.onError(code);
+                }
+                if (window.bridge && window.bridge.onConnectionState) {
+                    window.bridge.onConnectionState("disconnected");
+                }
+            });
+
+            peer.on("disconnected", function() {
+                log("Guest disconnected from signaling server, attempting reconnect...");
+                if (window.bridge && window.bridge.onConnectionState) {
+                    window.bridge.onConnectionState("reconnecting");
+                }
+                try { peer.reconnect(); } catch(e) {}
+            });
+        },
+
+        send: function(obj) {
+            if (!obj) return;
+            var payload = (typeof obj === "string") ? JSON.parse(obj) : obj;
+
+            if (state.role === "host") {
+                if (payload.type === "action_request") {
+                    var hostNow = Date.now();
+                    var scheduled = {
+                        type: "state",
+                        action: payload.action,
+                        targetTime: payload.targetTime,
+                        executeAt: hostNow + 500,
+                        paused: payload.paused,
+                        position: payload.targetTime,
+                        file: payload.file,
+                        duration: payload.duration,
+                        from: state.myUsername
+                    };
+                    log("Host scheduling own action: " + payload.action + " at " + scheduled.executeAt);
+                    for (var p in state.guests) {
+                        if (state.guests.hasOwnProperty(p)) {
+                            try { state.guests[p].conn.send(scheduled); } catch (e) {}
+                        }
+                    }
+                    if (window.bridge && window.bridge.onMessage) {
+                        window.bridge.onMessage(JSON.stringify(scheduled));
+                    }
+                    return;
+                }
+
+                if (payload.type === "chat") {
+                    payload.from = state.myUsername;
+                    // Broadcast to all guests
+                    for (var p in state.guests) {
+                        if (state.guests.hasOwnProperty(p)) {
+                            try { state.guests[p].conn.send(payload); } catch (e) {}
+                        }
+                    }
+                    // And notify host's own bridge so the chat UI displays it
+                    if (window.bridge && window.bridge.onMessage) {
+                        window.bridge.onMessage(JSON.stringify(payload));
+                    }
+                } else {
+                    // State / other
+                    payload.from = state.myUsername;
+                    for (var pid in state.guests) {
+                        if (state.guests.hasOwnProperty(pid)) {
+                            try { state.guests[pid].conn.send(payload); } catch (e) {}
+                        }
+                    }
+                }
+            } else if (state.role === "guest") {
+                if (state.hostConn && state.hostConn.open) {
+                    try {
+                        state.hostConn.send(payload);
+                    } catch (e) {
+                        log("Failed to send to host: " + e);
+                    }
+                } else {
+                    log("Cannot send: not connected to host.");
+                }
+            }
+        },
+
+        leave: function() {
+            log("Leaving room / resetting P2P state.");
+            if (state.clockSyncInterval) {
+                clearInterval(state.clockSyncInterval);
+                state.clockSyncInterval = null;
+            }
+            state.clockOffset = 0;
+            state.onClockPong = null;
+
+            if (state.role === "host") {
+                for (var p in state.guests) {
+                    if (state.guests.hasOwnProperty(p)) {
+                        try {
+                            state.guests[p].conn.send({ type: "host_left" });
+                            state.guests[p].conn.close();
+                        } catch (e) {}
+                    }
+                }
+                state.guests = {};
+            } else if (state.role === "guest") {
+                if (state.hostConn) {
+                    try { state.hostConn.close(); } catch (e) {}
+                    state.hostConn = null;
+                }
+            }
+
+            if (state.peer) {
+                try { state.peer.destroy(); } catch (e) {}
+                state.peer = null;
+            }
+
+            state.role = null;
+            state.myRoomId = "";
+        }
+    };
+
+    // Initialize when DOM is ready
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", initWebChannel);
+    } else {
+        initWebChannel();
+    }
+})();
+</script>
+</body>
+</html>

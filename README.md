@@ -1,123 +1,115 @@
 # SyncMPV
 
-Watch videos in perfect sync with friends anywhere — built-in mpv player,
-real-time playback sync, chat, and fullscreen. No fuss, no external
-player window.
+Watch videos in perfect sync with friends anywhere — built-in mpv player, real-time peer-to-peer playback sync, text chat, and fullscreen. No port forwarding, no server hosting, and no external player windows.
 
-A PyQt5 client + Python asyncio server for watching videos together,
-staying perfectly in sync (play, pause, seek) no matter where everyone
-is, with built-in chat.
+SyncMPV supports modern **serverless Peer-to-Peer (WebRTC)** mode by default, while retaining the classic Python asyncio server mode for dedicated or local network setups.
+
+---
 
 ## Download
 
-Windows users: grab the latest installer from the
-**[Releases page](https://github.com/Th3Gold3nRainbow/SyncMPV/releases)**
-— no need to build anything yourself.
+Windows users: grab the latest installer from the **[Releases page](https://github.com/Th3Gold3nRainbow/SyncMPV/releases)** — no Python setup needed.
 
-## Features
+---
 
-- mpv video player embedded directly in the interface (no separate
-  window to juggle)
-- Automatic sync of play/pause/position across everyone in a room
-- Built-in text chat
-- Fullscreen (`F` / `F11` key, double-click, `Esc` to exit)
-- Fast forward/rewind (⏪10s/30s, 30s/10s⏩ buttons, or arrow keys
-  ←/→ ±10s, ↑/↓ ±60s)
-- Optional server password (useful for a server exposed on the
-  internet via No-IP/DynDNS)
-- Dark UI with a neon accent
-- Windows packaging included: build a `.exe` (PyInstaller) and a full
-  installer (Inno Setup) with icon and English/French language choice
+## Key Features
 
-## Architecture
+- **Peer-to-Peer (P2P) by default**: Create a room, share the generated Room ID (`syncmpv-xxxxxx`), and connect directly without port forwarding, dynamic DNS, or self-hosting a server.
+- **Microsecond Clock Synchronization**: NTP-style clock sync at handshake (5 pings, lowest RTT measurement, re-synced every 30s) to align system clocks across different computers.
+- **Scheduled Actions**: Play, pause, and seek actions are scheduled with a 500 ms execution window (`executeAt = hostNow + 500ms`) so all clients trigger seek and playback at the exact same physical instant.
+- **Smart Drift Correction**: Dynamic playback speed adjustment (between 0.97× and 1.03×) for sub-second drift (< 1s) to eliminate stutter and audio cuts. Automatic seek catch-up for larger desyncs (≥ 1s).
+- **Different File Protection**: Alerts participants in the chat if a guest opens a different video file or version (different filename or duration difference > 2s) instead of corrupting playback positions.
+- **Classic Server Mode**: Switch anytime to centralized `server.py` mode for LAN parties or dedicated VPS hosting.
+- **Embedded mpv Player**: Direct libmpv integration (no separate external window to manage).
+- **Rich Controls**: Progress bar seeking, fast forward/rewind buttons (⏪10s/30s, 10s/30s⏩), keyboard arrow shortcuts (←/→ ±10s, ↑/↓ ±60s), Spacebar toggle, and Fullscreen (`F` / `F11` / double-click).
+- **Integrated Chat & Dark Neon Theme**: Built-in side-panel chat, user list, and French / English localization.
 
-- `server.py` — central server (asyncio). Manages "rooms" and
-  broadcasts playback state to every client connected to the same
-  room.
-- `client.py` — PyQt5 client. The video player is an `mpv.MPV`
-  instance embedded directly into a `QFrame` (via its `winId()`),
-  alongside a side panel for connecting, the user list, and chat.
+---
 
-## Installation (Linux / macOS)
+## Quick Start (P2P Mode — Recommended)
 
-### 1. System dependency: libmpv
+No port forwarding or server hosting required!
+
+1. **Launch SyncMPV**.
+2. **Host a room**:
+   - Keep the mode on **P2P (recommended)**.
+   - Enter your username and optional password.
+   - Click **Create Room**.
+   - Click **Copy** to copy your unique Room ID (e.g. `syncmpv-a3b7k9`).
+3. **Join a room**:
+   - Guests enter their username, paste the Room ID into the **Room ID** field, and click **Join**.
+4. **Open a video**:
+   - Each participant clicks **Open a file…** to select their local video file (SyncMPV synchronizes playback control, not the video file stream itself).
+   - Play, pause, and seeks are synchronized automatically in real time!
+
+---
+
+## Server Mode (Optional)
+
+If you prefer self-hosting a dedicated central server (e.g., on a local LAN or private VPS):
+
+### 1. Run the server
 
 ```bash
-# Debian / Ubuntu
-sudo apt install libmpv2   # or libmpv-dev / libmpv1 depending on your distro
-
-# Arch
-sudo pacman -S mpv
-
-# macOS (Homebrew)
-brew install mpv
+python server.py --host 0.0.0.0 --port 8999
+# Or with an optional password:
+python server.py --host 0.0.0.0 --port 8999 --password yourpassword
 ```
 
-### 2. Python dependencies
+### 2. Connect clients
+
+In SyncMPV, switch the dropdown to **Server**, enter the server IP/Port and room name, then click **Connect**.
+
+---
+
+## How Synchronization Works
+
+1. **Handshake & Clock Sync**:
+   Upon joining, the guest exchanges 5 sequential pings with the host to determine the exact round-trip time (RTT) and time offset:
+   $$\text{offset} = \text{hostTime} - \left(t_0 + \frac{\text{RTT}}{2}\right)$$
+   The offset with the lowest RTT is retained, and refreshed every 30 seconds.
+
+2. **Scheduled Actions**:
+   When any participant interacts with the player (Play/Pause button, Spacebar, progress bar slider, ±10/30s buttons, or keyboard arrows), a request is routed to the host, which timestamps the action at $t = \text{hostNow} + 500\text{ ms}$. Each peer converts this timestamp using their clock offset and schedules execution via high-precision timers.
+
+3. **Continuous Drift Adjustment**:
+   The host broadcasts its state periodically every 3 seconds. Guests compute the theoretical playback position:
+   $$\text{theo\_pos} = \text{targetTime} + (\text{now}_{\text{host}} - \text{executeAt})$$
+   - **Gap < 0.05 s**: Normal 1.0× speed.
+   - **0.05 s ≤ Gap < 1.0 s**: Smooth speed adjustment ($0.97\times$ to $1.03\times$) without seeking or audio glitches.
+   - **Gap ≥ 1.0 s**: Instant seek to the theoretical position with anti-echo and anti-bounce protections.
+
+---
+
+## Known Limitations & Technical Details
+
+- **PeerJS Cloud Signaling**: The P2P mode utilizes the public PeerJS Cloud signaling server exclusively for the initial WebRTC connection handshake (exchanging SDP offer/answers). Once connected, video control data channels flow directly peer-to-peer; no media or chat is routed through third-party servers.
+- **Symmetric NATs & TURN**: P2P connections use standard STUN servers (Google STUN). In rare restricted network environments (such as certain strict corporate/university firewalls or symmetric NATs), direct P2P connections may fail without a relay (TURN) server. In this case, an explicit error is displayed and the classic Server mode can be used as a fallback.
+- **Installer Size**: The Windows installer is larger (~150 MB+) because it embeds both `libmpv` (video decoding engine) and `PyQtWebEngine` (Chromium runtime required for the headless WebRTC PeerJS stack).
+
+---
+
+## Building from Source
+
+### Requirements
+- Python 3.8+
+- `libmpv` (e.g. `mpv-2.dll` on Windows, `libmpv2` on Debian/Ubuntu, `mpv` via Homebrew on macOS)
 
 ```bash
-python3 -m venv venv
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Linux/macOS:
 source venv/bin/activate
+
 pip install -r requirements.txt
+python client.py
 ```
 
-## Installation (Windows)
+### Windows Executable & Installer
+Run `build_exe.bat` to compile `dist\SyncMPV.exe` using PyInstaller, then compile `installer.iss` with Inno Setup to generate `Output\SyncMPV-Setup.exe`.
 
-See [README_WINDOWS.md](README_WINDOWS.md) to build a `.exe` and a full
-Windows installer (icon, language choice, shortcuts).
-
-## Usage
-
-### Start the server
-
-```bash
-python3 server.py --host 0.0.0.0 --port 8999
-```
-
-If the server is exposed to the internet (e.g. via a dynamic DNS
-service like No-IP), add a password so random people can't join your
-room:
-
-```bash
-python3 server.py --host 0.0.0.0 --port 8999 --password yourpassword
-```
-
-### Start a client
-
-```bash
-python3 client.py
-```
-
-In the window:
-1. Fill in the server host/port, a room name (same for everyone), a
-   username, and the password if the server requires one, then click
-   **Connect**.
-2. Click **Open a file…** to pick a local video (each participant
-   needs the same file on their own disk — like Syncplay, only
-   playback state is synced, not the video stream itself).
-3. Play, pause, and seeking are automatically mirrored to every other
-   participant in the room.
-
-## How the sync works
-
-- Each client sends its state (pause/position/file) to the server
-  whenever a local event happens (pause, seek), or every 3 seconds
-  otherwise.
-- The server keeps the room's last known state, hands it to any new
-  client that joins, then rebroadcasts every update to the others.
-- A client receiving a remote state only re-seeks if the gap is more
-  than 1 second, to avoid micro-stutters.
-
-## Known limitations / possible improvements
-
-- No fine-grained network latency compensation yet (a basic ping/pong
-  already exists in the protocol, but isn't used yet to correct exact
-  position).
-- No shared playlist, one file at a time only.
-- No end-to-end encryption: use on a trusted network, or put it behind
-  a TLS reverse proxy for internet-facing use.
-- Not compatible with the official public Syncplay server (different
-  protocol) — you need to host your own instance of `server.py`.
+---
 
 ## License
 

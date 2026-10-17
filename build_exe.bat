@@ -80,6 +80,18 @@ if not exist icon.ico (
     set MISSING=1
 )
 
+if not exist p2p\p2p.html (
+    echo ATTENTION: p2p\p2p.html est introuvable.
+    echo Le mode P2P ne pourra pas fonctionner.
+    set MISSING=1
+)
+
+if not exist p2p\peerjs.min.js (
+    echo ATTENTION: p2p\peerjs.min.js est introuvable.
+    echo Le mode P2P ne pourra pas fonctionner.
+    set MISSING=1
+)
+
 if "%MISSING%"=="1" (
     echo.
     echo Vous pouvez continuer sans ces fichiers, mais le resultat sera incomplet.
@@ -90,7 +102,17 @@ if "%MISSING%"=="1" (
 
 echo.
 echo [5/5] Compilation avec PyInstaller...
-pyinstaller --noconfirm --onefile --windowed --name SyncMPV --icon icon.ico --add-binary "mpv-2.dll;." client.py
+set "PYQT5_DIR=venv\Lib\site-packages\PyQt5"
+
+pyinstaller --noconfirm --onefile --windowed --name SyncMPV --icon icon.ico ^
+    --add-binary "mpv-2.dll;." ^
+    --add-data "p2p;p2p" ^
+    --add-binary "%PYQT5_DIR%\Qt5\bin\QtWebEngineProcess.exe;PyQt5\Qt5\bin" ^
+    --add-data "%PYQT5_DIR%\Qt5\resources;PyQt5\Qt5\resources" ^
+    --add-data "%PYQT5_DIR%\Qt5\translations\qtwebengine_locales;PyQt5\Qt5\translations\qtwebengine_locales" ^
+    --collect-all PyQt5.QtWebEngineWidgets ^
+    --collect-all PyQtWebEngine ^
+    client.py
 if errorlevel 1 (
     echo.
     echo ERREUR: la compilation PyInstaller a echoue.
@@ -99,6 +121,8 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
+
+if exist icon.ico copy /y icon.ico dist\icon.ico >nul
 
 echo.
 echo ============================================================

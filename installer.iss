@@ -20,7 +20,7 @@
 ; ============================================================
 
 #define MyAppName "SyncMPV"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppPublisher "Th3Gold3nRainbow"
 #define MyAppExeName "SyncMPV.exe"
 
@@ -64,3 +64,22 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+Type: files; Name: "{app}\lang.txt"
+
+[Code]
+// Enregistre la langue choisie a l'installation dans lang.txt, a cote
+// de l'executable. L'application (client.py) lit ce fichier au
+// demarrage pour afficher son interface dans la meme langue que
+// l'installateur (anglais ou francais).
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  LangFile: string;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    LangFile := ExpandConstant('{app}\lang.txt');
+    SaveStringToFile(LangFile, ActiveLanguage(), False);
+  end;
+end;
