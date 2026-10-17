@@ -25,3 +25,6 @@ Before building, verify all translation catalogs and UI strings with the i18n va
 ```bash
 python tools/check_i18n.py
 ```
+
+For detailed linguistic review notes on Russian and Arabic translations, see [docs/translation-review.md](translation-review.md).
+

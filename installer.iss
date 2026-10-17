@@ -82,7 +82,7 @@ Source: "dist\NeonSyncs.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "brand\logo.ico"; DestDir: "{app}\brand"; Flags: ignoreversion
 Source: "brand\logo.svg"; DestDir: "{app}\brand"; Flags: ignoreversion
-Source: "i18n\*"; DestDir: "{app}\i18n"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "i18n\*.json"; DestDir: "{app}\i18n"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\icon.ico"
