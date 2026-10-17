@@ -171,22 +171,22 @@ def detect_language() -> str:
     # Rule a & b: Check installer re-run vs user choice
     if current_installer:
         if last_installer is not None and current_installer != last_installer:
-            # Installer was re-run with a different language: installer wins, clears user choice
-            settings["language"] = current_installer
+            # Installer was re-run with a different language: installer wins, clears manual choice
+            settings.pop("language", None)
             settings["last_installer_lang"] = current_installer
             save_settings(settings)
             return current_installer
 
-        # If last_installer not recorded yet, store it
-        if last_installer != current_installer:
+        # Record initial installer language if not recorded yet
+        if last_installer is None:
             settings["last_installer_lang"] = current_installer
             save_settings(settings)
 
-        # If user made an explicit choice, it takes priority
+        # a. User choice made in application
         if user_lang in SUPPORTED_LANGUAGES:
             return user_lang
 
-        # Otherwise installer choice wins
+        # b. Installer language in lang.txt
         return current_installer
 
     # No installer lang.txt: user choice if valid
