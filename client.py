@@ -224,38 +224,54 @@ QWidget {{
     font-weight: 500;
 }}
 QLabel {{
+    background: transparent;
+    border: none;
     color: {THEME['text_muted']};
     font-family: {THEME['font_body']};
 }}
+QCheckBox, QRadioButton, QGroupBox {{
+    background: transparent;
+    border: none;
+}}
 QLabel[role="section"] {{
+    background: transparent;
+    border: none;
     color: {THEME['accent_primary']};
     font-family: {THEME['font_display']};
     font-weight: 700;
     font-size: 8.5pt;
     letter-spacing: 1px;
-    padding-top: 8px;
+    padding: 0;
+    margin: 0;
 }}
 QLabel[role="brand"] {{
+    background: transparent;
+    border: none;
     font-family: {THEME['font_display']};
     font-size: 13pt;
     font-weight: 900;
     letter-spacing: 1.5px;
 }}
 QLabel[role="website_link"] {{
+    background: transparent;
+    border: none;
     font-family: {THEME['font_display']};
     font-size: 8pt;
     font-weight: 700;
     letter-spacing: 1px;
-    padding-top: 6px;
+    padding: 0;
+    margin: 0;
     color: {THEME['text_muted']};
 }}
 QLabel[role="website_link"]:hover {{
     color: {THEME['accent_primary']};
 }}
 QLabel[role="status"] {{
+    background: transparent;
+    border: none;
     color: {THEME['text_primary']};
     font-weight: 600;
-    padding: 4px 0;
+    padding: 0;
 }}
 QLabel[role="status"][state="connected"] {{
     color: {THEME['status_connected']};
@@ -427,11 +443,17 @@ QWidget#panel {{
     background-color: {THEME['bg_panel']};
     border-left: 1px solid {THEME['border_subtle']};
 }}
+QWidget#brandHeader, QWidget#brandInfoWidget, QWidget#p2pContainer, QWidget#serverContainer, QWidget#roomInfoWidget {{
+    background: transparent;
+    border: none;
+}}
 QWidget#controlsBar {{
     background-color: {THEME['bg_panel']};
     border-top: 1px solid {THEME['border_subtle']};
 }}
 QLabel#timeLabel {{
+    background: transparent;
+    border: none;
     color: {THEME['text_muted']};
     font-family: {THEME['font_display']};
     font-size: 8.5pt;
@@ -826,6 +848,48 @@ class NeonSyncsWindow(QWidget):
     seek_requested = pyqtSignal(float)
     pause_toggle_requested = pyqtSignal()
 
+    def update_logo_pixmap(self):
+        """Rend le logo vectoriel SVG dans un QPixmap avec antialiasing,
+        SmoothPixmapTransform et prise en compte exacte du devicePixelRatio (HiDPI 100%, 125%, 150%, 200%)."""
+        if not hasattr(self, "logo_label"):
+            return
+        logo_path = resource_path(os.path.join("brand", "logo.svg"))
+        if not os.path.exists(logo_path):
+            logo_path = resource_path(os.path.join("brand", "favicon.svg"))
+        if not os.path.exists(logo_path):
+            return
+
+        renderer = QSvgRenderer(logo_path)
+        if not renderer.isValid():
+            return
+
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+        logical_size = 28
+        pixel_size = max(1, int(round(logical_size * dpr)))
+
+        img = QImage(pixel_size, pixel_size, QImage.Format_ARGB32_Premultiplied)
+        img.fill(QColor(0, 0, 0, 0))
+
+        painter = QPainter(img)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        renderer.render(painter)
+        painter.end()
+
+        pix = QPixmap.fromImage(img)
+        pix.setDevicePixelRatio(dpr)
+        self.logo_label.setPixmap(pix)
+        self.logo_label.setFixedSize(logical_size, logical_size)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.update_logo_pixmap()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if hasattr(self, "logo_label"):
+            self.update_logo_pixmap()
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(tr("window_title"))
@@ -1007,33 +1071,47 @@ class NeonSyncsWindow(QWidget):
         right.setContentsMargins(14, 14, 14, 14)
         right.setSpacing(6)
 
-        # En-tête de marque NeonSyncs (logo discret + titre officiel + sélecteur de langue)
+        # En-tête de marque NeonSyncs (logo vectoriel HiDPI + nom officiel + sélecteur de langue)
         self.brand_header = QWidget()
-        self.brand_header.setLayoutDirection(Qt.LeftToRight)
+        self.brand_header.setObjectName("brandHeader")
+        self.brand_header.setStyleSheet("background: transparent; border: none;")
+        self.brand_header.setLayoutDirection(Qt.RightToLeft if is_rtl() else Qt.LeftToRight)
         brand_layout = QHBoxLayout(self.brand_header)
-        brand_layout.setContentsMargins(0, 0, 0, 6)
-        brand_layout.setSpacing(6)
+        brand_layout.setContentsMargins(0, 0, 0, 4)
+        brand_layout.setSpacing(0)
 
-        logo_label = QLabel()
-        logo_svg = resource_path(os.path.join("brand", "favicon.svg"))
-        if os.path.exists(logo_svg):
-            renderer = QSvgRenderer(logo_svg)
-            logo_img = QImage(28, 28, QImage.Format_ARGB32_Premultiplied)
-            logo_img.fill(QColor(0, 0, 0, 0))
-            lp = QPainter(logo_img)
-            lp.setRenderHint(QPainter.Antialiasing)
-            renderer.render(lp)
-            lp.end()
-            logo_label.setPixmap(QPixmap.fromImage(logo_img))
-        logo_label.setFixedSize(28, 28)
-        logo_label.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=10))
-        brand_layout.addWidget(logo_label)
+        # Sous-conteneur horizontal logo + nom (espacement 10px, centrage vertical)
+        self.brand_info_widget = QWidget()
+        self.brand_info_widget.setObjectName("brandInfoWidget")
+        self.brand_info_widget.setStyleSheet("background: transparent; border: none;")
+        self.brand_info_widget.setLayoutDirection(Qt.LeftToRight)
+        brand_info_layout = QHBoxLayout(self.brand_info_widget)
+        brand_info_layout.setContentsMargins(0, 0, 0, 0)
+        brand_info_layout.setSpacing(10)
+        brand_info_layout.setAlignment(Qt.AlignVCenter)
+
+        self.logo_label = QLabel()
+        self.logo_label.setObjectName("logoLabel")
+        self.logo_label.setStyleSheet("background: transparent; border: none;")
+        self.logo_label.setFixedSize(28, 28)
+        self.update_logo_pixmap()
+        brand_info_layout.addWidget(self.logo_label, 0, Qt.AlignVCenter)
 
         c_prim = THEME["accent_primary"]
         c_sec = THEME["accent_secondary"]
-        brand_title = QLabel(f'<span style="color:{c_prim}; font-weight:900;">NEON</span><span style="color:{c_sec}; font-weight:900;">SYNCS</span>')
-        brand_title.setProperty("role", "brand")
-        brand_layout.addWidget(brand_title)
+        name_upper = APP_NAME.upper()
+        neon_part = name_upper[:4]   # "NEON"
+        syncs_part = name_upper[4:]  # "SYNCS"
+        self.brand_title = QLabel(
+            f'<span style="color:{c_prim}; font-weight:900;">{neon_part}</span>'
+            f'<span style="color:{c_sec}; font-weight:900;">{syncs_part}</span>'
+        )
+        self.brand_title.setProperty("role", "brand")
+        self.brand_title.setStyleSheet("background: transparent; border: none;")
+        self.brand_title.setAlignment(Qt.AlignVCenter)
+        brand_info_layout.addWidget(self.brand_title, 0, Qt.AlignVCenter)
+
+        brand_layout.addWidget(self.brand_info_widget, 0, Qt.AlignVCenter)
         brand_layout.addStretch(1)
 
         # Sélecteur de langue dans l'application (Phase 3 bis)
@@ -1048,12 +1126,15 @@ class NeonSyncsWindow(QWidget):
         lang_idx = {"en": 0, "fr": 1, "ru": 2, "ar": 3}.get(cur_lang, 0)
         self.combo_lang.setCurrentIndex(lang_idx)
         self.combo_lang.currentIndexChanged.connect(self.on_language_changed)
-        brand_layout.addWidget(self.combo_lang)
+        brand_layout.addWidget(self.combo_lang, 0, Qt.AlignVCenter)
 
         right.addWidget(self.brand_header)
 
+        right.addSpacing(6)
         self.lbl_conn = QLabel(tr("section_connection"))
         self.lbl_conn.setProperty("role", "section")
+        self.lbl_conn.setFixedHeight(22)
+        self.lbl_conn.setAlignment((Qt.AlignRight if is_rtl() else Qt.AlignLeft) | Qt.AlignVCenter)
         right.addWidget(self.lbl_conn)
 
         # Sélecteur de mode (P2P / Serveur)
@@ -1175,16 +1256,22 @@ class NeonSyncsWindow(QWidget):
         right.addWidget(self.btn_retry_p2p)
 
         # Utilisateurs
+        right.addSpacing(10)
         self.lbl_users = QLabel(tr("section_users"))
         self.lbl_users.setProperty("role", "section")
+        self.lbl_users.setFixedHeight(22)
+        self.lbl_users.setAlignment((Qt.AlignRight if is_rtl() else Qt.AlignLeft) | Qt.AlignVCenter)
         right.addWidget(self.lbl_users)
         self.user_list = QListWidget()
         self.user_list.setMaximumHeight(110)
         right.addWidget(self.user_list)
 
         # Chat
+        right.addSpacing(10)
         self.lbl_chat = QLabel(tr("section_chat"))
         self.lbl_chat.setProperty("role", "section")
+        self.lbl_chat.setFixedHeight(22)
+        self.lbl_chat.setAlignment((Qt.AlignRight if is_rtl() else Qt.AlignLeft) | Qt.AlignVCenter)
         right.addWidget(self.lbl_chat)
         self.chat_list = QListWidget()
         right.addWidget(self.chat_list, stretch=1)
@@ -1201,11 +1288,13 @@ class NeonSyncsWindow(QWidget):
         right.addLayout(chat_row)
 
         # Lien discret vers le site officiel https://neonsyncs.com
+        right.addSpacing(6)
         c_muted = THEME["text_muted"]
         self.lbl_site = QLabel(f'<a href="{APP_URL}" style="color:{c_muted}; text-decoration:none;">neonsyncs.com</a>')
         self.lbl_site.setLayoutDirection(Qt.LeftToRight)
         self.lbl_site.setOpenExternalLinks(True)
         self.lbl_site.setAlignment(Qt.AlignCenter)
+        self.lbl_site.setFixedHeight(24)
         self.lbl_site.setCursor(Qt.PointingHandCursor)
         self.lbl_site.setProperty("role", "website_link")
         right.addWidget(self.lbl_site)
@@ -1519,14 +1608,19 @@ class NeonSyncsWindow(QWidget):
         else:
             self.status_label.setText(tr("status_disconnected"))
 
+        rtl = is_rtl()
         self.lbl_users.setText(tr("section_users"))
         self.lbl_chat.setText(tr("section_chat"))
+        align_section = (Qt.AlignRight if rtl else Qt.AlignLeft) | Qt.AlignVCenter
+        self.lbl_conn.setAlignment(align_section)
+        self.lbl_users.setAlignment(align_section)
+        self.lbl_chat.setAlignment(align_section)
+        self.lbl_site.setAlignment(Qt.AlignCenter)
         self.chat_input.setPlaceholderText(tr("chat_placeholder"))
         self.btn_send.setText(tr("send"))
 
         self.refresh_chat_display()
 
-        rtl = is_rtl()
         direction = Qt.RightToLeft if rtl else Qt.LeftToRight
         app = QApplication.instance()
         if app:
@@ -1537,12 +1631,16 @@ class NeonSyncsWindow(QWidget):
         self.time_current_label.setLayoutDirection(Qt.LeftToRight)
         self.seek_slider.setLayoutDirection(Qt.LeftToRight)
         self.time_total_label.setLayoutDirection(Qt.LeftToRight)
-        self.brand_header.setLayoutDirection(Qt.LeftToRight)
+        self.brand_header.setLayoutDirection(direction)
+        if hasattr(self, "brand_info_widget"):
+            self.brand_info_widget.setLayoutDirection(Qt.LeftToRight)
         self.input_room_id.setLayoutDirection(Qt.LeftToRight)
         self.input_my_room_id.setLayoutDirection(Qt.LeftToRight)
         self.input_host.setLayoutDirection(Qt.LeftToRight)
         self.input_port.setLayoutDirection(Qt.LeftToRight)
         self.lbl_site.setLayoutDirection(Qt.LeftToRight)
+
+        self.update_logo_pixmap()
 
         if hasattr(self, "combo_lang"):
             self.combo_lang.blockSignals(True)
@@ -1948,6 +2046,8 @@ SyncMPVWindow = NeonSyncsWindow
 
 
 def main():
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
     if is_rtl():
         app.setLayoutDirection(Qt.RightToLeft)

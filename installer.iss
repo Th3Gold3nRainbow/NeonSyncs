@@ -1,4 +1,4 @@
-﻿; ============================================================
+; ============================================================
 ;  installer.iss — NeonSyncs Inno Setup Script
 ;  Professional Windows installer for NeonSyncs with full i18n
 ;  (English, French, Russian, Arabic RTL).
@@ -81,6 +81,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "dist\NeonSyncs.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "brand\logo.ico"; DestDir: "{app}\brand"; Flags: ignoreversion
+Source: "brand\logo.svg"; DestDir: "{app}\brand"; Flags: ignoreversion
 Source: "i18n\*"; DestDir: "{app}\i18n"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
