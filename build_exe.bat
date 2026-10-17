@@ -54,7 +54,7 @@ set MISSING=0
 if not exist mpv-2.dll (
     echo ATTENTION: mpv-2.dll est introuvable dans ce dossier.
     echo Le programme ne fonctionnera pas sans elle.
-    echo Telechargez libmpv pour Windows, voir README_WINDOWS.md
+    echo Telechargez libmpv pour Windows, voir docs/building-windows.md
     set MISSING=1
 )
 
@@ -111,7 +111,7 @@ set "PYQT5_DIR=venv\Lib\site-packages\PyQt5"
     --add-data "p2p;p2p" ^
     --add-data "assets;assets" ^
     --add-data "brand;brand" ^
-    --add-data "i18n;i18n" ^
+    --add-data "i18n\*.json;i18n" ^
     --add-binary "%PYQT5_DIR%\Qt5\bin\QtWebEngineProcess.exe;PyQt5\Qt5\bin" ^
     --add-data "%PYQT5_DIR%\Qt5\resources;PyQt5\Qt5\resources" ^
     --add-data "%PYQT5_DIR%\Qt5\translations\qtwebengine_locales;PyQt5\Qt5\translations\qtwebengine_locales" ^

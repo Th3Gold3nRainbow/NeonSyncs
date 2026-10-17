@@ -60,3 +60,9 @@ Under the terms of the GNU General Public License version 3, any binary distribu
 - Author: Jordan Russell, Martijn Laan
 - Source: https://jrsoftware.org/isinfo.php
 - License: Inno Setup License (modified BSD license)
+
+### Inno Setup Arabic Translation
+- Contributor: Nacer Baaziz (nacerstile@gmail.com)
+- Source: https://jrsoftware.org/files/istrans/
+- License: Distributed with Inno Setup under Inno Setup license terms
+
