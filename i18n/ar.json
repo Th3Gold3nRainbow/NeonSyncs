@@ -24,7 +24,7 @@
   "create_room": "إنشاء غرفة",
   "join_room": "انضمام",
   "room_id": "معرف الغرفة",
-  "room_id_placeholder": "مثال: neonsyncs-xxxxxx",
+  "room_id_placeholder": "مثال: \u2066neonsyncs-xxxxxx\u2069",
   "copy_id": "نسخ",
   "id_copied": "تم النسخ!",
   "leave_room": "مغادرة الغرفة",
@@ -60,8 +60,8 @@
   "chat_placeholder": "اكتب رسالة…",
   "send": "إرسال",
   "chat_not_connected": "⚠ غير متصل — انضم إلى غرفة أو اتصل بالخادم أولاً.",
-  "warning_no_file": "لم يتم فتح أي ملف. يشغل المضيف: {file}",
-  "warning_different_file": "الملف يختلف عن ملف المضيف ({details}) — تم إيقاف المزامنة مؤقتاً.",
+  "warning_no_file": "لم يتم فتح أي ملف. يشغل المضيف: \u2066{file}\u2069",
+  "warning_different_file": "الملف يختلف عن ملف المضيف (\u2066{details}\u2069) — تم إيقاف المزامنة مؤقتاً.",
   "dialog_open_video_title": "اختر ملف فيديو",
   "dialog_open_video_filter": "ملفات الفيديو (*.mp4 *.mkv *.avi *.mov *.webm *.flv *.ts *.m4v);;كافة الملفات (*.*)"
 }

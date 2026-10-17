@@ -110,17 +110,25 @@ _get_asset_path = resource_path
 
 
 def load_application_fonts():
-    """Charge les polices embarquées (Orbitron et Rajdhani) depuis assets/fonts/."""
+    """Charge les polices embarquées (Orbitron et Rajdhani) depuis assets/fonts/
+    et configure la pile de polices de secours (Segoe UI, Tahoma)."""
     fonts_dir = resource_path(os.path.join("assets", "fonts"))
-    if not os.path.isdir(fonts_dir):
-        return
-    for font_file in os.listdir(fonts_dir):
-        if font_file.lower().endswith((".ttf", ".otf")):
-            path = os.path.join(fonts_dir, font_file)
-            try:
-                QFontDatabase.addApplicationFont(path)
-            except Exception:
-                pass
+    if os.path.isdir(fonts_dir):
+        for font_file in os.listdir(fonts_dir):
+            if font_file.lower().endswith((".ttf", ".otf")):
+                path = os.path.join(fonts_dir, font_file)
+                try:
+                    QFontDatabase.addApplicationFont(path)
+                except Exception:
+                    pass
+
+    default_font = QFont()
+    if hasattr(default_font, "setFamilies"):
+        default_font.setFamilies(["Rajdhani", "Segoe UI", "Tahoma"])
+    else:
+        default_font.setFamily("Rajdhani")
+    default_font.setPointSize(10)
+    QApplication.setFont(default_font)
 
 
 def make_neon_glow(color_str, blur_radius=14):
@@ -197,9 +205,9 @@ THEME = {
     "btn_pink_hover_bottom": "rgba(229, 9, 20, 0.12)",
 
     # Polices
-    "font_body": "'Rajdhani', 'Segoe UI', Arial, sans-serif",
-    "font_display": "'Orbitron', 'Segoe UI', Arial, sans-serif",
-    "font_mono": "'Orbitron', 'Consolas', monospace",
+    "font_body": "'Rajdhani', 'Segoe UI', 'Tahoma', sans-serif",
+    "font_display": "'Orbitron', 'Segoe UI', 'Tahoma', sans-serif",
+    "font_mono": "'Orbitron', 'Consolas', 'Tahoma', monospace",
 }
 
 
@@ -921,9 +929,10 @@ class NeonSyncsWindow(QWidget):
         self.video_frame.setFrameShape(QFrame.NoFrame)
         left.addWidget(self.video_frame, stretch=1)
 
-        # Barre de contrôle (masquée en plein écran)
+        # Barre de contrôle (masquée en plein écran — conservée LTR quelle que soit la langue)
         self.controls_widget = QWidget(self)
         self.controls_widget.setObjectName("controlsBar")
+        self.controls_widget.setLayoutDirection(Qt.LeftToRight)
         controls_container = QVBoxLayout(self.controls_widget)
         controls_container.setContentsMargins(10, 6, 10, 8)
         controls_container.setSpacing(4)
@@ -932,13 +941,16 @@ class NeonSyncsWindow(QWidget):
         progress_row = QHBoxLayout()
         self.time_current_label = QLabel(tr("time_default"))
         self.time_current_label.setObjectName("timeLabel")
+        self.time_current_label.setLayoutDirection(Qt.LeftToRight)
         self.seek_slider = QSlider(Qt.Horizontal)
+        self.seek_slider.setLayoutDirection(Qt.LeftToRight)
         self.seek_slider.setRange(0, SEEK_BAR_RESOLUTION)
         self.seek_slider.setValue(0)
         self.seek_slider.sliderPressed.connect(self.on_slider_pressed)
         self.seek_slider.sliderReleased.connect(self.on_slider_released)
         self.time_total_label = QLabel(tr("time_default"))
         self.time_total_label.setObjectName("timeLabel")
+        self.time_total_label.setLayoutDirection(Qt.LeftToRight)
         progress_row.addWidget(self.time_current_label)
         progress_row.addWidget(self.seek_slider, stretch=1)
         progress_row.addWidget(self.time_total_label)
@@ -987,6 +999,7 @@ class NeonSyncsWindow(QWidget):
 
         # En-tête de marque NeonSyncs (logo discret + titre officiel)
         brand_header = QWidget()
+        brand_header.setLayoutDirection(Qt.LeftToRight)
         brand_layout = QHBoxLayout(brand_header)
         brand_layout.setContentsMargins(0, 0, 0, 6)
         brand_layout.setSpacing(8)
@@ -1052,6 +1065,8 @@ class NeonSyncsWindow(QWidget):
         p2p_layout.addWidget(QLabel(tr("room_id")))
         join_row = QHBoxLayout()
         self.input_room_id = QLineEdit()
+        self.input_room_id.setLayoutDirection(Qt.LeftToRight)
+        self.input_room_id.setAlignment(Qt.AlignLeft)
         self.input_room_id.setPlaceholderText(tr("room_id_placeholder"))
         self.btn_join_room = QPushButton(tr("join_room"))
         self.btn_join_room.setProperty("role", "pink")
@@ -1066,6 +1081,8 @@ class NeonSyncsWindow(QWidget):
         room_info_layout.setContentsMargins(0, 0, 0, 0)
         room_info_layout.setSpacing(4)
         self.input_my_room_id = QLineEdit()
+        self.input_my_room_id.setLayoutDirection(Qt.LeftToRight)
+        self.input_my_room_id.setAlignment(Qt.AlignLeft)
         self.input_my_room_id.setReadOnly(True)
         self.btn_copy_id = QPushButton(tr("copy_id"))
         self.btn_copy_id.setProperty("role", "small")
@@ -1090,7 +1107,11 @@ class NeonSyncsWindow(QWidget):
         server_layout.setSpacing(6)
 
         self.input_host = QLineEdit("127.0.0.1")
+        self.input_host.setLayoutDirection(Qt.LeftToRight)
+        self.input_host.setAlignment(Qt.AlignLeft)
         self.input_port = QLineEdit("8999")
+        self.input_port.setLayoutDirection(Qt.LeftToRight)
+        self.input_port.setAlignment(Qt.AlignLeft)
         default_room = tr("default_room_name", id=random.randint(1000, 9999))
         self.input_room = QLineEdit(default_room)
 
@@ -1152,6 +1173,7 @@ class NeonSyncsWindow(QWidget):
         # Lien discret vers le site officiel https://neonsyncs.com
         c_muted = THEME["text_muted"]
         lbl_site = QLabel(f'<a href="{APP_URL}" style="color:{c_muted}; text-decoration:none;">neonsyncs.com</a>')
+        lbl_site.setLayoutDirection(Qt.LeftToRight)
         lbl_site.setOpenExternalLinks(True)
         lbl_site.setAlignment(Qt.AlignCenter)
         lbl_site.setCursor(Qt.PointingHandCursor)
@@ -1595,7 +1617,9 @@ class NeonSyncsWindow(QWidget):
             self.user_list.clear()
             self.user_list.addItems(msg.get("users", []))
         elif mtype == "chat":
-            self.chat_list.addItem(f"{msg.get('from')}: {msg.get('message')}")
+            sender = msg.get("from", "")
+            message = msg.get("message", "")
+            self.chat_list.addItem(f"\u2066{sender}\u2069: {message}")
             self.chat_list.scrollToBottom()
         elif mtype == "error":
             self.status_label.setText(tr("status_error", message=msg.get('message', '')))
@@ -1641,9 +1665,9 @@ class NeonSyncsWindow(QWidget):
                     self.shown_warnings.add(warn_key)
                     reasons = []
                     if name_diff:
-                        reasons.append(f"{os.path.basename(remote_file)} ≠ {os.path.basename(self.current_file)}")
+                        reasons.append(f"\u2066{os.path.basename(remote_file)}\u2069 ≠ \u2066{os.path.basename(self.current_file)}\u2069")
                     if duration_diff:
-                        reasons.append(f"{format_time(remote_duration)} ≠ {format_time(local_duration)}")
+                        reasons.append(f"\u2066{format_time(remote_duration)}\u2069 ≠ \u2066{format_time(local_duration)}\u2069")
                     self.chat_list.addItem(f"⚠ {tr('warning_different_file', details=', '.join(reasons))}")
                     self.chat_list.scrollToBottom()
                 return  # Ne force PAS la synchronisation sur un fichier différent
@@ -1789,6 +1813,10 @@ SyncMPVWindow = NeonSyncsWindow
 
 def main():
     app = QApplication(sys.argv)
+    if is_rtl():
+        app.setLayoutDirection(Qt.RightToLeft)
+    else:
+        app.setLayoutDirection(Qt.LeftToRight)
     load_application_fonts()
     app.setStyleSheet(STYLE_SHEET)
     if os.path.exists(ICON_PATH):
