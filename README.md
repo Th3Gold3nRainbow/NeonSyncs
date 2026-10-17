@@ -24,7 +24,8 @@ Windows users: grab the latest installer from the **[Releases page](https://gith
 - **Classic Server Mode**: Switch anytime to centralized `server.py` mode for LAN parties or dedicated VPS hosting.
 - **Embedded mpv Player**: Direct libmpv integration (no separate external window to manage).
 - **Rich Controls**: Progress bar seeking, fast forward/rewind buttons (⏪10s/30s, 10s/30s⏩), keyboard arrow shortcuts (←/→ ±10s, ↑/↓ ±60s), Spacebar toggle, and Fullscreen (`F` / `F11` / double-click).
-- **Integrated Chat & Dark Neon Theme**: Built-in side-panel chat, user list, Orbitron/Rajdhani cyberpunk styling, and French / English localization.
+- **Integrated Chat & Dark Neon Theme**: Built-in side-panel chat, user list, Orbitron/Rajdhani cyberpunk styling, and bidirectional Unicode chat isolation.
+- **Full Internationalization (4 Languages)**: Fully localized in **English**, **Français**, **Русский**, and **العربية** (native RTL layout with zero font tofu across all scripts).
 
 ---
 
@@ -91,6 +92,26 @@ In NeonSyncs, switch the dropdown to **Server**, enter the server IP/Port and ro
 
 ---
 
+## Multi-Language Support (i18n)
+
+NeonSyncs is fully internationalized across **4 languages**:
+- **English** (`en`)
+- **Français** (`fr`)
+- **Русский** (`ru`)
+- **العربية** (`ar`, with native Right-To-Left layout and proper bidirectional Unicode isolation)
+
+### Changing Language
+1. **In-App Hot Switch**: Click the language dropdown located directly in the application header. The interface switches instantly without restarting or disconnecting ongoing P2P watchparties.
+2. **Persistent Settings**: The application saves your preference to `%APPDATA%\NeonSyncs\settings.json`.
+3. **Installer Language**: Selected during installation in the Inno Setup language dialog (or via `/LANG=...`). The installer writes `{app}\lang.txt` (read-only for the app).
+4. **Priority Order on Startup**:
+   - **a.** User selection in `settings.json` (unless the installer was re-run since);
+   - **b.** Installer language from `lang.txt` (if installer was re-run with another language, it takes precedence and resets manual choice);
+   - **c.** Operating system locale (`QLocale.system()`);
+   - **d.** Fallback to English.
+
+---
+
 ## Building from Source
 
 ### Requirements
@@ -108,8 +129,24 @@ pip install -r requirements.txt
 python client.py
 ```
 
+### Validating Translations
+Run the i18n catalog and source linter:
+```bash
+python tools/check_i18n.py
+```
+
 ### Windows Executable & Installer
-Run `build_exe.bat` to compile `dist\NeonSyncs.exe` using PyInstaller, then compile `installer.iss` with Inno Setup to generate `Output\NeonSyncs-Setup.exe`.
+To generate the production Windows binaries:
+1. **Compile the standalone executable**:
+   ```cmd
+   build_exe.bat
+   ```
+   Outputs `dist\NeonSyncs.exe` via PyInstaller (bundles `libmpv`, `PyQtWebEngine`, and translations).
+2. **Compile the installer**:
+   ```cmd
+   build_installer.bat
+   ```
+   Outputs `Output\NeonSyncs-Setup.exe` via Inno Setup 6 with full 4-language support, custom neon branded artwork, and uninstallation cleanup prompt for `%APPDATA%\NeonSyncs`.
 
 ---
 

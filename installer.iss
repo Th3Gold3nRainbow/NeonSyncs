@@ -33,6 +33,7 @@ WizardImageFile=wizard-image.bmp
 WizardSmallImageFile=wizard-small-image.bmp
 WizardImageStretch=no
 ShowLanguageDialog=yes
+PrivilegesRequiredOverridesAllowed=commandline
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
