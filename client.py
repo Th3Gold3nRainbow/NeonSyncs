@@ -47,6 +47,9 @@ import json
 import socket
 import threading
 import time
+import random
+
+from i18n import tr, get_language, set_language, is_rtl
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -78,115 +81,10 @@ import mpv
 
 
 # ---------------------------------------------------------------------------
-# Identité de l'application & Internationalisation
+# Identité de l'application
 # ---------------------------------------------------------------------------
 APP_NAME = "NeonSyncs"
 APP_URL = "https://neonsyncs.com"
-
-STRINGS = {
-    "fr": {
-        "window_title": f"{APP_NAME} — lecture synchronisée",
-        "open_file": "Ouvrir un fichier…",
-        "back_30": "⏪ 30s",
-        "back_10": "⏪ 10s",
-        "play_pause": "Lecture / Pause",
-        "fwd_10": "10s ⏩",
-        "fwd_30": "30s ⏩",
-        "fullscreen": "Plein écran (F11)",
-        "section_server": "SERVEUR",
-        "label_host": "Hôte",
-        "label_port": "Port",
-        "label_room": "Salon",
-        "label_user": "Pseudo",
-        "label_password": "Mot de passe",
-        "password_placeholder": "(optionnel)",
-        "connect": "Se connecter",
-        "disconnect": "Se déconnecter",
-        "status_disconnected": "Déconnecté",
-        "status_connected": "Connecté",
-        "status_error": "Erreur : {message}",
-        "status_disconnected_lost": "Déconnecté (connexion perdue)",
-        "section_users": "UTILISATEURS",
-        "section_chat": "CHAT",
-        "chat_placeholder": "Écrire un message…",
-        "send": "Envoyer",
-        "chat_not_connected": "⚠ Non connecté — connectez-vous d'abord à un salon ou un serveur.",
-        "mode_p2p": "P2P (recommandé)",
-        "mode_server": "Serveur",
-        "create_room": "Créer un salon",
-        "join_room": "Rejoindre",
-        "room_id": "ID du salon",
-        "room_id_placeholder": "ex: neonsyncs-xxxxxx",
-        "copy_id": "Copier",
-        "id_copied": "Copié !",
-        "status_reconnecting": "Reconnexion…",
-        "status_creating": "Création du salon…",
-        "status_joining": "Connexion au salon…",
-        "host_left": "L'hôte a quitté le salon",
-        "p2p_error_signaling": "Serveur de signalement injoignable",
-        "p2p_error_no_turn": "Connexion impossible (probable NAT sans TURN)",
-        "p2p_error_peer_unavailable": "Salon introuvable ou hôte déconnecté",
-        "error_wrong_password": "Mot de passe incorrect",
-        "p2p_error_connection_failed": "Échec de connexion (délai dépassé ou NAT strict)",
-        "p2p_retry": "Réessayer",
-        "section_connection": "CONNEXION",
-        "label_mode": "Mode",
-        "leave_room": "Quitter le salon",
-        "warning_no_file": "Aucun fichier ouvert. L'hôte lit : {file}",
-        "warning_different_file": "Fichier différent de l'hôte ({details}) — synchronisation suspendue.",
-    },
-    "en": {
-        "window_title": f"{APP_NAME} — synchronized playback",
-        "open_file": "Open a file…",
-        "back_30": "⏪ 30s",
-        "back_10": "⏪ 10s",
-        "play_pause": "Play / Pause",
-        "fwd_10": "10s ⏩",
-        "fwd_30": "30s ⏩",
-        "fullscreen": "Fullscreen (F11)",
-        "section_server": "SERVER",
-        "label_host": "Host",
-        "label_port": "Port",
-        "label_room": "Room",
-        "label_user": "Username",
-        "label_password": "Password",
-        "password_placeholder": "(optional)",
-        "connect": "Connect",
-        "disconnect": "Disconnect",
-        "status_disconnected": "Disconnected",
-        "status_connected": "Connected",
-        "status_error": "Error: {message}",
-        "status_disconnected_lost": "Disconnected (connection lost)",
-        "section_users": "USERS",
-        "section_chat": "CHAT",
-        "chat_placeholder": "Type a message…",
-        "send": "Send",
-        "chat_not_connected": "⚠ Not connected — connect to a room or server first.",
-        "mode_p2p": "P2P (recommended)",
-        "mode_server": "Server",
-        "create_room": "Create Room",
-        "join_room": "Join",
-        "room_id": "Room ID",
-        "room_id_placeholder": "e.g. neonsyncs-xxxxxx",
-        "copy_id": "Copy",
-        "id_copied": "Copied!",
-        "status_reconnecting": "Reconnecting…",
-        "status_creating": "Creating room…",
-        "status_joining": "Joining room…",
-        "host_left": "Host left the room",
-        "p2p_error_signaling": "Signaling server unreachable",
-        "p2p_error_no_turn": "Connection failed (probable NAT without TURN)",
-        "p2p_error_peer_unavailable": "Room not found or host disconnected",
-        "error_wrong_password": "Incorrect password",
-        "p2p_error_connection_failed": "Connection failed (timeout or strict NAT)",
-        "p2p_retry": "Retry",
-        "section_connection": "CONNECTION",
-        "label_mode": "Mode",
-        "leave_room": "Leave Room",
-        "warning_no_file": "No file open. Host is playing: {file}",
-        "warning_different_file": "Different file from host ({details}) — sync suspended.",
-    },
-}
 
 
 def _base_dir():
@@ -234,32 +132,7 @@ def make_neon_glow(color_str, blur_radius=14):
     return effect
 
 
-def _detect_language():
-    """Langue choisie à l'installation (fichier lang.txt écrit par Inno
-    Setup à côté de l'exécutable), sinon français par défaut."""
-    try:
-        lang_file = os.path.join(_base_dir(), "lang.txt")
-        with open(lang_file, "r", encoding="utf-8") as f:
-            content = f.read().strip().lower()
-        if "english" in content or content == "en":
-            return "en"
-        if "french" in content or content == "fr":
-            return "fr"
-    except Exception:
-        pass
-    return "fr"
-
-
-LANG = _detect_language()
-
 ICON_PATH = resource_path("icon.ico")
-
-
-def tr(key, **kwargs):
-    text = STRINGS.get(LANG, STRINGS["fr"]).get(key, key)
-    if kwargs:
-        return text.format(**kwargs)
-    return text
 
 
 # ---------------------------------------------------------------------------
@@ -681,11 +554,11 @@ class NetworkClient(QObject):
             # par le systeme, ajoutant une latence supplementaire qui nuit
             # a la synchronisation.
             self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        except OSError as e:
-            self.connected_signal.emit(False, str(e))
+        except OSError:
+            self.connected_signal.emit(False, "net_error_connection_refused")
             return
         self.running = True
-        self.connected_signal.emit(True, "connecté")
+        self.connected_signal.emit(True, "status_connected")
         self.send({"type": "hello", "room": room, "username": username, "password": password})
         threading.Thread(target=self._recv_loop, daemon=True).start()
 
@@ -884,7 +757,7 @@ class P2PClient(QObject):
     def _on_connection_state(self, state):
         if state == "connected":
             self.running = True
-            self.connected_signal.emit(True, "connecté")
+            self.connected_signal.emit(True, "status_connected")
         elif state == "reconnecting":
             self.reconnecting_signal.emit()
         elif state == "disconnected":
@@ -1057,14 +930,14 @@ class NeonSyncsWindow(QWidget):
 
         # --- Barre de progression (glissable) + temps écoulé / durée ---
         progress_row = QHBoxLayout()
-        self.time_current_label = QLabel("0:00")
+        self.time_current_label = QLabel(tr("time_default"))
         self.time_current_label.setObjectName("timeLabel")
         self.seek_slider = QSlider(Qt.Horizontal)
         self.seek_slider.setRange(0, SEEK_BAR_RESOLUTION)
         self.seek_slider.setValue(0)
         self.seek_slider.sliderPressed.connect(self.on_slider_pressed)
         self.seek_slider.sliderReleased.connect(self.on_slider_released)
-        self.time_total_label = QLabel("0:00")
+        self.time_total_label = QLabel(tr("time_default"))
         self.time_total_label.setObjectName("timeLabel")
         progress_row.addWidget(self.time_current_label)
         progress_row.addWidget(self.seek_slider, stretch=1)
@@ -1153,7 +1026,8 @@ class NeonSyncsWindow(QWidget):
         right.addWidget(self.combo_mode)
 
         # Champs communs (Pseudo & Mot de passe)
-        self.input_user = QLineEdit("invite")
+        default_user = tr("default_username", id=random.randint(1000, 9999))
+        self.input_user = QLineEdit(default_user)
         self.input_password = QLineEdit()
         self.input_password.setEchoMode(QLineEdit.Password)
         self.input_password.setPlaceholderText(tr("password_placeholder"))
@@ -1217,7 +1091,8 @@ class NeonSyncsWindow(QWidget):
 
         self.input_host = QLineEdit("127.0.0.1")
         self.input_port = QLineEdit("8999")
-        self.input_room = QLineEdit("salon1")
+        default_room = tr("default_room_name", id=random.randint(1000, 9999))
+        self.input_room = QLineEdit(default_room)
 
         for w, label in [
             (self.input_host, tr("label_host")),
@@ -1374,7 +1249,12 @@ class NeonSyncsWindow(QWidget):
     # Actions locales
     # ------------------------------------------------------------------
     def open_file(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Choisir une vidéo")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("dialog_open_video_title"),
+            "",
+            tr("dialog_open_video_filter"),
+        )
         if not path:
             return
         self.current_file = path
@@ -1520,7 +1400,7 @@ class NeonSyncsWindow(QWidget):
             self.server_container.show()
 
     def do_create_room(self):
-        user = self.input_user.text().strip() or "Hote"
+        user = self.input_user.text().strip() or tr("default_username", id=random.randint(1000, 9999))
         password = self.input_password.text()
         self.last_p2p_action = ("create", user, password)
         self.btn_retry_p2p.hide()
@@ -1534,9 +1414,9 @@ class NeonSyncsWindow(QWidget):
         room_id = self.input_room_id.text().strip()
         if not room_id:
             self.set_status_state("error")
-            self.status_label.setText(tr("status_error", message="ID du salon requis"))
+            self.status_label.setText(tr("status_error", message=tr("error_room_id_required")))
             return
-        user = self.input_user.text().strip() or "Invite"
+        user = self.input_user.text().strip() or tr("default_username", id=random.randint(1000, 9999))
         password = self.input_password.text()
         self.last_p2p_action = ("join", room_id, user, password)
         self.btn_retry_p2p.hide()
@@ -1616,7 +1496,7 @@ class NeonSyncsWindow(QWidget):
                 self.btn_connect.style().polish(self.btn_connect)
         else:
             self.set_status_state("error")
-            friendly_msg = tr(message) if message in STRINGS.get(LANG, STRINGS["fr"]) else message
+            friendly_msg = tr(message)
             self.status_label.setText(tr("status_error", message=friendly_msg))
             if self.combo_mode.currentIndex() == 0:  # P2P
                 self.btn_create_room.setEnabled(True)

@@ -130,7 +130,7 @@ class SyncServer:
 
         if mtype == "hello":
             if self.password and msg.get("password") != self.password:
-                await client.send({"type": "error", "message": "Mot de passe incorrect"})
+                await client.send({"type": "error", "code": "error_wrong_password", "message": "error_wrong_password"})
                 client.writer.close()
                 log.info(f"Connexion refusee (mot de passe incorrect) depuis {client.writer.get_extra_info('peername')}")
                 return

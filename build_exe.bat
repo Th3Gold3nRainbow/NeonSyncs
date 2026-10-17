@@ -104,6 +104,12 @@ if not exist assets\fonts\Rajdhani-Medium.ttf (
     set MISSING=1
 )
 
+if not exist i18n\en.json (
+    echo ATTENTION: i18n\en.json est introuvable.
+    echo Les traductions de l'application seront manquantes.
+    set MISSING=1
+)
+
 if "%MISSING%"=="1" (
     echo.
     echo Vous pouvez continuer sans ces fichiers, mais le resultat sera incomplet.
@@ -121,6 +127,7 @@ pyinstaller --noconfirm --onefile --windowed --name NeonSyncs --icon icon.ico ^
     --add-data "p2p;p2p" ^
     --add-data "assets;assets" ^
     --add-data "brand;brand" ^
+    --add-data "i18n;i18n" ^
     --add-binary "%PYQT5_DIR%\Qt5\bin\QtWebEngineProcess.exe;PyQt5\Qt5\bin" ^
     --add-data "%PYQT5_DIR%\Qt5\resources;PyQt5\Qt5\resources" ^
     --add-data "%PYQT5_DIR%\Qt5\translations\qtwebengine_locales;PyQt5\Qt5\translations\qtwebengine_locales" ^

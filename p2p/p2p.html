@@ -155,7 +155,7 @@
             window.p2p.leave();
 
             state.role = "host";
-            state.myUsername = username || "Hote";
+            state.myUsername = username || "Host";
             state.myPassword = password || "";
             state.guests = {};
             state.createAttempts = 0;
@@ -164,7 +164,7 @@
                 state.createAttempts++;
                 if (state.createAttempts > 5) {
                     if (window.bridge && window.bridge.onError) {
-                        window.bridge.onError("Impossible de générer un ID de salon unique après 5 tentatives.");
+                        window.bridge.onError("p2p_error_room_id_generation");
                     }
                     return;
                 }
@@ -207,12 +207,12 @@
                             var guestPass = data.password || "";
                             if (state.myPassword && guestPass !== state.myPassword) {
                                 log("Invalid password from guest " + peerId);
-                                conn.send({ type: "error", error_code: "error_wrong_password", message: "Mot de passe incorrect" });
+                                conn.send({ type: "error", error_code: "error_wrong_password", message: "error_wrong_password" });
                                 setTimeout(function() { conn.close(); }, 200);
                                 return;
                             }
 
-                            var guestUser = data.username || ("Invite_" + peerId.substr(0, 4));
+                            var guestUser = data.username || ("Guest_" + peerId.substr(0, 4));
                             state.guests[peerId] = { conn: conn, username: guestUser };
                             log("Guest registered: " + guestUser + " (" + peerId + ")");
 
@@ -326,6 +326,10 @@
                         code = "p2p_error_signaling";
                     } else if (err.type === "webrtc" || err.type === "disconnected") {
                         code = "p2p_error_no_turn";
+                    } else if (err.type === "browser-incompatible") {
+                        code = "p2p_error_browser_incompatible";
+                    } else if (err.type === "invalid-id") {
+                        code = "p2p_error_invalid_id";
                     }
                     if (window.bridge && window.bridge.onError) {
                         window.bridge.onError(code);
@@ -348,7 +352,7 @@
             window.p2p.leave();
 
             state.role = "guest";
-            state.myUsername = username || "Invite";
+            state.myUsername = username || "Guest";
             state.myPassword = password || "";
 
             // Normalize room ID: lowercase, ensure neonsyncs- prefix
@@ -450,6 +454,12 @@
                     code = "p2p_error_signaling";
                 } else if (err.type === "webrtc" || err.type === "disconnected") {
                     code = "p2p_error_no_turn";
+                } else if (err.type === "browser-incompatible") {
+                    code = "p2p_error_browser_incompatible";
+                } else if (err.type === "invalid-id") {
+                    code = "p2p_error_invalid_id";
+                } else if (err.type === "unavailable-id") {
+                    code = "p2p_error_id_taken";
                 }
                 if (window.bridge && window.bridge.onError) {
                     window.bridge.onError(code);
