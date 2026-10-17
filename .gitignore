@@ -1,20 +1,23 @@
-# Environnements Python
+# Python virtual environments and caches
 venv/
 __pycache__/
 *.pyc
 
-# Artefacts de compilation PyInstaller
+# PyInstaller build artifacts
 build/
 dist/
 *.spec
 
-# Artefacts Inno Setup
+# Inno Setup artifacts
 Output/
 
-# Bibliothèque native mpv (à télécharger séparément, voir README_WINDOWS.md)
+# Native mpv library (download separately, see docs/building-windows.md)
 mpv-2.dll
 mpv-1.dll
 
-# Fichiers système
+# Release checksums
+SHA256SUMS.txt
+
+# System files
 .DS_Store
 Thumbs.db
