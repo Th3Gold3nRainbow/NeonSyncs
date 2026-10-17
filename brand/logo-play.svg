@@ -1,0 +1,13 @@
+<svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="play-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <circle cx="22" cy="22" r="20" stroke="#00f0ff" stroke-width="1.8" stroke-opacity="0.95" filter="url(#play-glow)" />
+  <polygon points="17,13 17,31 33,22" fill="#00f0ff" fill-opacity="0.95" filter="url(#play-glow)" />
+</svg>

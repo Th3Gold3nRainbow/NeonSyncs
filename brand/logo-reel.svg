@@ -1,0 +1,37 @@
+<svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="nsl-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.6" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <filter id="nsl-glow-strong" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="2.8" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+    <radialGradient id="nsl-hub-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f0ff" stop-opacity="0.9" />
+      <stop offset="60%" stop-color="#00c8d4" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#00f0ff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <circle cx="26" cy="26" r="22" stroke="#00f0ff" stroke-width="1.5" stroke-opacity="0.9" filter="url(#nsl-glow-strong)" />
+  <circle cx="26" cy="26" r="16" stroke="#00f0ff" stroke-width="0.8" stroke-opacity="0.45" stroke-dasharray="2.5 2.5" />
+  <g filter="url(#nsl-glow)"><circle cx="45.00" cy="26.00" r="2.4" fill="#00f0ff" fill-opacity="0.9" /><circle cx="45.00" cy="26.00" r="1.1" fill="#08070d" /></g>
+  <g filter="url(#nsl-glow)"><circle cx="35.50" cy="42.45" r="2.4" fill="#00f0ff" fill-opacity="0.9" /><circle cx="35.50" cy="42.45" r="1.1" fill="#08070d" /></g>
+  <g filter="url(#nsl-glow)"><circle cx="16.50" cy="42.45" r="2.4" fill="#00f0ff" fill-opacity="0.9" /><circle cx="16.50" cy="42.45" r="1.1" fill="#08070d" /></g>
+  <g filter="url(#nsl-glow)"><circle cx="7.00" cy="26.00" r="2.4" fill="#00f0ff" fill-opacity="0.9" /><circle cx="7.00" cy="26.00" r="1.1" fill="#08070d" /></g>
+  <g filter="url(#nsl-glow)"><circle cx="16.50" cy="9.55" r="2.4" fill="#00f0ff" fill-opacity="0.9" /><circle cx="16.50" cy="9.55" r="1.1" fill="#08070d" /></g>
+  <g filter="url(#nsl-glow)"><circle cx="35.50" cy="9.55" r="2.4" fill="#00f0ff" fill-opacity="0.9" /><circle cx="35.50" cy="9.55" r="1.1" fill="#08070d" /></g>
+  <line x1="30.76" y1="28.75" x2="38.12" y2="33.00" stroke="#00f0ff" stroke-width="1.2" stroke-opacity="0.7" stroke-linecap="round" filter="url(#nsl-glow)" />
+  <line x1="21.24" y1="28.75" x2="13.88" y2="33.00" stroke="#00f0ff" stroke-width="1.2" stroke-opacity="0.7" stroke-linecap="round" filter="url(#nsl-glow)" />
+  <line x1="26.00" y1="20.50" x2="26.00" y2="12.00" stroke="#00f0ff" stroke-width="1.2" stroke-opacity="0.7" stroke-linecap="round" filter="url(#nsl-glow)" />
+  <circle cx="26" cy="26" r="5.5" fill="url(#nsl-hub-grad)" />
+  <circle cx="26" cy="26" r="5.5" stroke="#00f0ff" stroke-width="1.4" stroke-opacity="0.95" filter="url(#nsl-glow)" />
+  <circle cx="26" cy="26" r="1.8" fill="#08070d" />
+  <circle cx="26" cy="26" r="1.8" stroke="#00f0ff" stroke-width="0.6" stroke-opacity="0.6" />
+  <path d="M 38.75 3.92 A 25.5 25.5 0 0 1 49.96 17.28" stroke="#00f0ff" stroke-width="2" stroke-opacity="0.85" stroke-linecap="round" fill="none" filter="url(#nsl-glow-strong)" />
+  <path d="M 2.04 17.28 A 25.5 25.5 0 0 1 13.25 3.92" stroke="#00f0ff" stroke-width="2" stroke-opacity="0.85" stroke-linecap="round" fill="none" filter="url(#nsl-glow-strong)" />
+  <path d="M 17.28 49.96 A 25.5 25.5 0 0 1 6.47 42.39" stroke="#00f0ff" stroke-width="2" stroke-opacity="0.85" stroke-linecap="round" fill="none" filter="url(#nsl-glow-strong)" />
+  <path d="M 44.03 7.97 A 25.5 25.5 0 0 1 50.63 19.40" stroke="#00f0ff" stroke-width="2" stroke-opacity="0.85" stroke-linecap="round" fill="none" filter="url(#nsl-glow-strong)" />
+  <polygon points="34.5,9.5 37,7.5 36,12" fill="#00f0ff" fill-opacity="0.9" filter="url(#nsl-glow)" />
+</svg>
