@@ -53,12 +53,18 @@ from PyQt5.QtWidgets import (
     QLineEdit, QLabel, QFileDialog, QListWidget, QSplitter, QFrame,
     QShortcut, QSlider, QComboBox, QGraphicsDropShadowEffect
 )
-from PyQt5.QtGui import QKeySequence, QIcon, QColor, QFontDatabase, QFont
+from PyQt5.QtGui import QKeySequence, QIcon, QColor, QFontDatabase, QFont, QPixmap, QImage, QPainter
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QUrl, pyqtSlot
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWebChannel import QWebChannel
+from PyQt5.QtSvg import QSvgRenderer
 
 if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("neonsyncs.watchparty.client")
+    except Exception:
+        pass
     _dll_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
     if os.path.exists(_dll_dir):
         os.environ["PATH"] = _dll_dir + os.pathsep + os.environ.get("PATH", "")
@@ -346,6 +352,12 @@ QLabel[role="section"] {{
     font-size: 8.5pt;
     letter-spacing: 1px;
     padding-top: 8px;
+}}
+QLabel[role="brand"] {{
+    font-family: {THEME['font_display']};
+    font-size: 13pt;
+    font-weight: 900;
+    letter-spacing: 1.5px;
 }}
 QLabel[role="status"] {{
     color: {THEME['text_primary']};
@@ -1059,6 +1071,35 @@ class SyncMPVWindow(QWidget):
         right = QVBoxLayout(self.right_panel)
         right.setContentsMargins(14, 14, 14, 14)
         right.setSpacing(6)
+
+        # En-tête de marque NeonSyncs (logo discret + titre officiel)
+        brand_header = QWidget()
+        brand_layout = QHBoxLayout(brand_header)
+        brand_layout.setContentsMargins(0, 0, 0, 6)
+        brand_layout.setSpacing(8)
+
+        logo_label = QLabel()
+        logo_svg = resource_path(os.path.join("brand", "favicon.svg"))
+        if os.path.exists(logo_svg):
+            renderer = QSvgRenderer(logo_svg)
+            logo_img = QImage(28, 28, QImage.Format_ARGB32_Premultiplied)
+            logo_img.fill(QColor(0, 0, 0, 0))
+            lp = QPainter(logo_img)
+            lp.setRenderHint(QPainter.Antialiasing)
+            renderer.render(lp)
+            lp.end()
+            logo_label.setPixmap(QPixmap.fromImage(logo_img))
+        logo_label.setFixedSize(28, 28)
+        logo_label.setGraphicsEffect(make_neon_glow(THEME["accent_primary"], blur_radius=10))
+        brand_layout.addWidget(logo_label)
+
+        c_prim = THEME["accent_primary"]
+        c_sec = THEME["accent_secondary"]
+        brand_title = QLabel(f'<span style="color:{c_prim}; font-weight:900;">NEON</span><span style="color:{c_sec}; font-weight:900;">SYNCS</span>')
+        brand_title.setProperty("role", "brand")
+        brand_layout.addWidget(brand_title)
+        brand_layout.addStretch(1)
+        right.addWidget(brand_header)
 
         lbl_conn = QLabel(tr("section_connection"))
         lbl_conn.setProperty("role", "section")
