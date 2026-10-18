@@ -9,7 +9,7 @@ import os
 import sys
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Tuple, Optional
 
 log = logging.getLogger("neonsyncs.i18n")
 
@@ -134,26 +134,43 @@ def save_user_language(lang: str):
     save_settings(settings)
 
 
-def read_installer_language() -> str:
-    """Reads language written by installer in lang.txt next to executable.
+def read_installer_info() -> Tuple[Optional[str], Optional[str]]:
+    """Reads language and install token from lang.txt next to executable.
+    First line: language ('en'/'fr'/'ru'/'ar' or full name).
+    Second line: unique installation token (optional).
     Strictly read-only; the application never writes to this file.
     """
     try:
         lang_file = os.path.join(_base_dir(), "lang.txt")
         if os.path.exists(lang_file):
             with open(lang_file, "r", encoding="utf-8") as f:
-                content = f.read().strip().lower()
-            if "english" in content or content == "en":
-                return "en"
-            if "french" in content or content == "fr":
-                return "fr"
-            if "russian" in content or content == "ru":
-                return "ru"
-            if "arabic" in content or content == "ar":
-                return "ar"
+                lines = [line.strip() for line in f if line.strip()]
+            if not lines:
+                return None, None
+            first_line = lines[0].lower()
+            token = lines[1] if len(lines) > 1 else None
+
+            lang = None
+            if "english" in first_line or first_line == "en":
+                lang = "en"
+            elif "french" in first_line or first_line == "fr":
+                lang = "fr"
+            elif "russian" in first_line or first_line == "ru":
+                lang = "ru"
+            elif "arabic" in first_line or first_line == "ar":
+                lang = "ar"
+            return lang, token
     except Exception as e:
         log.warning("Could not read installer lang.txt: %s", e)
-    return None
+    return None, None
+
+
+def read_installer_language() -> Optional[str]:
+    """Reads language written by installer in lang.txt next to executable.
+    Strictly read-only; the application never writes to this file.
+    """
+    lang, _ = read_installer_info()
+    return lang
 
 
 def detect_language() -> str:
@@ -166,10 +183,26 @@ def detect_language() -> str:
     settings = load_settings()
     user_lang = settings.get("language")
     last_installer = settings.get("last_installer_lang")
-    current_installer = read_installer_language()
+    last_token = settings.get("last_installer_token")
+    current_installer, current_token = read_installer_info()
 
     # Rule a & b: Check installer re-run vs user choice
     if current_installer:
+        if current_token is not None:
+            if current_token != last_token:
+                # Installer was run with a new token: installer wins, clears manual choice
+                settings.pop("language", None)
+                settings["last_installer_lang"] = current_installer
+                settings["last_installer_token"] = current_token
+                save_settings(settings)
+                return current_installer
+
+            # Same token as last launch: user choice in app takes precedence
+            if user_lang in SUPPORTED_LANGUAGES:
+                return user_lang
+            return current_installer
+
+        # Legacy lang.txt without token: maintain previous behavior
         if last_installer is not None and current_installer != last_installer:
             # Installer was re-run with a different language: installer wins, clears manual choice
             settings.pop("language", None)

@@ -102,6 +102,8 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   LangFile: string;
   LangCode: string;
+  InstallToken: string;
+  LangContent: string;
 begin
   if CurStep = ssPostInstall then
   begin
@@ -114,7 +116,9 @@ begin
       LangCode := 'ar'
     else
       LangCode := 'en';
-    SaveStringToFile(LangFile, LangCode, False);
+    InstallToken := GetDateTimeString('yyyymmddhhnnss', #0, #0) + '_' + IntToStr(Random(1000000));
+    LangContent := LangCode + #13#10 + InstallToken + #13#10;
+    SaveStringToFile(LangFile, LangContent, False);
   end;
 end;
 
