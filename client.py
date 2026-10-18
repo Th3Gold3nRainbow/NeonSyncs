@@ -898,6 +898,7 @@ class P2PClient(QObject):
 class NeonSyncsWindow(QWidget):
     fs_toggle_requested = pyqtSignal()
     fs_exit_requested = pyqtSignal()
+    fs_dblclick_requested = pyqtSignal()
     seek_requested = pyqtSignal(float)
     pause_toggle_requested = pyqtSignal()
     mpv_volume_signal = pyqtSignal(float)
@@ -1084,6 +1085,7 @@ class NeonSyncsWindow(QWidget):
             self.current_volume = 100.0
         self.volume_muted = bool(settings.get("muted", False))
         self._updating_volume_ui = False
+        self._last_dbl_click_at = 0.0
 
         self._build_ui()
         self._init_mpv()
@@ -1094,6 +1096,7 @@ class NeonSyncsWindow(QWidget):
         # pas dans le thread Qt principal).
         self.fs_toggle_requested.connect(self.toggle_fullscreen)
         self.fs_exit_requested.connect(self.exit_fullscreen)
+        self.fs_dblclick_requested.connect(self.on_video_double_click)
         self.seek_requested.connect(self.seek_relative)
         self.pause_toggle_requested.connect(self.toggle_pause)
         self.mpv_volume_signal.connect(self.on_mpv_volume_changed)
@@ -1194,6 +1197,7 @@ class NeonSyncsWindow(QWidget):
         self.video_frame = QFrame(self)
         self.video_frame.setObjectName("videoFrame")
         self.video_frame.setFrameShape(QFrame.NoFrame)
+        self.video_frame.mouseDoubleClickEvent = lambda e: self.on_video_double_click() if e.button() == Qt.LeftButton else None
         left.addWidget(self.video_frame, stretch=1)
 
         # Barre de contrôle (masquée en plein écran — conservée LTR quelle que soit la langue)
@@ -1570,11 +1574,15 @@ class NeonSyncsWindow(QWidget):
                 if value is not None:
                     self.mpv_mute_signal.emit(bool(value))
 
-            for key in ("f", "F11", "MBTN_LEFT_DBL", "SPACE"):
+            for key in ("f", "F11", "MBTN_LEFT", "MBTN_LEFT_DBL", "SPACE"):
                 try:
                     self.player.command("keybind", key, "ignore")
                 except Exception:
                     pass
+
+            @self.player.on_key_press("MBTN_LEFT")
+            def _mpv_left_click():
+                pass
 
             @self.player.on_key_press("SPACE")
             def _mpv_toggle_pause():
@@ -1594,7 +1602,7 @@ class NeonSyncsWindow(QWidget):
 
             @self.player.on_key_press("MBTN_LEFT_DBL")
             def _mpv_dbl_click():
-                self.fs_toggle_requested.emit()
+                self.fs_dblclick_requested.emit()
 
             @self.player.on_key_press("RIGHT")
             def _mpv_seek_fwd():
@@ -1781,6 +1789,14 @@ class NeonSyncsWindow(QWidget):
             self.seek_slider.blockSignals(True)
             self.seek_slider.setValue(max(0, min(value, SEEK_BAR_RESOLUTION)))
             self.seek_slider.blockSignals(False)
+
+    def on_video_double_click(self):
+        """Bascule le plein ecran sur double-clic avec anti-rebond d'environ 400 ms."""
+        now = time.time()
+        if now - getattr(self, "_last_dbl_click_at", 0.0) < 0.4:
+            return
+        self._last_dbl_click_at = now
+        self.toggle_fullscreen()
 
     def toggle_fullscreen(self):
         if self.is_fullscreen:
