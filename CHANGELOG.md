@@ -5,6 +5,21 @@ All notable changes to NeonSyncs are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-10-18
+
+### Added
+- Language selector button in the sidebar header with a native language dropdown menu (English, Français, Русский, العربية) and globe icon.
+- Local volume control button and slider with mute toggle and persistent volume settings in `%APPDATA%\NeonSyncs\settings.json`.
+- Fullscreen mode toggle by double-clicking the video display area, debounced to prevent re-triggering during window transitions.
+
+### Changed
+- Restricted Windows installer packaging to include only compiled translation files (`i18n\*.json`).
+- Cleaned up repository structure and updated internal documentation.
+
+### Fixed
+- Brand name "NEONSYNCS" display in the application header aligned with the new language button.
+- Installer language selection reliably enforced on subsequent installations by recording a unique session token in `lang.txt`.
+
 ## [2.2.0] - 2026-10-17
 
 ### Added

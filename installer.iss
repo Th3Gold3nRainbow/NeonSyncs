@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define MyAppName "NeonSyncs"
-#define MyAppVersion "2.2.0"
+#define MyAppVersion "2.3.0"
 #define MyAppPublisher "NeonSyncs"
 #define MyAppURL "https://neonsyncs.com"
 #define MyAppExeName "NeonSyncs.exe"
