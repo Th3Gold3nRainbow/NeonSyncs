@@ -21,11 +21,12 @@ Official website: https://neonsyncs.com
 - Playback drift correction with jump thresholds and cooldown intervals.
 - Embedded mpv video player without external playback windows.
 - Seekable progress bar reflecting current playback position and total duration.
+- Local volume control slider with mute button and persistent volume settings.
 - Jump controls with dedicated 10s and 30s buttons, plus keyboard arrow shortcuts.
-- Fullscreen mode (F, F11, or double-click) that hides all side panels and controls.
+- Fullscreen mode (F, F11, Escape, or double-click on the video) that hides all side panels and controls.
 - Integrated text chat and participant user list.
 - Warning banner when participants load video files with differing names or durations.
-- Four interface languages: English, French, Russian, and Arabic with Right-To-Left layout and live in-app switching without reconnecting.
+- Four interface languages: English, French, Russian, and Arabic with Right-To-Left layout and live in-app switching via header language button.
 - Windows installer available in all four languages with clean desktop shortcuts.
 - Legacy client-server mode (`server.py`) over TCP sockets with password support.
 - Custom STUN and TURN server configuration via `p2p/ice_servers.json`.
