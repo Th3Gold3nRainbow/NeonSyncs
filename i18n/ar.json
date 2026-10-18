@@ -64,5 +64,8 @@
   "warning_different_file": "الملف يختلف عن ملف المضيف (\u2066{details}\u2069) — تم إيقاف المزامنة مؤقتاً.",
   "dialog_open_video_title": "اختر ملف فيديو",
   "dialog_open_video_filter": "ملفات الفيديو (*.mp4 *.mkv *.avi *.mov *.webm *.flv *.ts *.m4v);;كافة الملفات (*.*)",
-  "tooltip_language": "اللغة"
+  "tooltip_language": "اللغة",
+  "tooltip_volume": "مستوى الصوت",
+  "tooltip_mute": "كتم الصوت",
+  "tooltip_unmute": "إلغاء كتم الصوت"
 }

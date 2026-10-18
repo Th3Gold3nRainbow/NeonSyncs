@@ -64,5 +64,8 @@
   "warning_different_file": "Файл отличается от файла хоста ({details}) — синхронизация приостановлена.",
   "dialog_open_video_title": "Выберите видеофайл",
   "dialog_open_video_filter": "Видеофайлы (*.mp4 *.mkv *.avi *.mov *.webm *.flv *.ts *.m4v);;Все файлы (*.*)",
-  "tooltip_language": "Язык"
+  "tooltip_language": "Язык",
+  "tooltip_volume": "Громкость",
+  "tooltip_mute": "Отключить звук",
+  "tooltip_unmute": "Включить звук"
 }
