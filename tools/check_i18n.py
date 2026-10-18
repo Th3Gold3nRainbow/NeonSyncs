@@ -213,7 +213,7 @@ def check_hot_language_switch(catalogs):
         "127.0.0.1", "8999", "0:00",
         "10s ⏩", "30s ⏩", "⏪ 10s", "⏪ 30s",
         "English", "Français", "Русский", "العربية",
-        "EN ▾", "FR ▾", "RU ▾", "AR ▾"
+        "EN ▾", "FR ▾", "RU ▾", "AR ▾", "▾ AR"
     }
 
     def collect_ui_texts(window):

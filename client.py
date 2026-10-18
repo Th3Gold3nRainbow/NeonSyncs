@@ -1244,7 +1244,7 @@ class NeonSyncsWindow(QWidget):
         self.btn_lang.setCursor(Qt.PointingHandCursor)
         self.btn_lang.setLayoutDirection(Qt.RightToLeft if is_rtl() else Qt.LeftToRight)
         cur_lang = get_language()
-        self.btn_lang.setText(f"{cur_lang.upper()} \u25be")
+        self.btn_lang.setText(f"\u25be {cur_lang.upper()}" if is_rtl() else f"{cur_lang.upper()} \u25be")
         self.btn_lang.setToolTip(tr("tooltip_language"))
         self.update_globe_pixmap()
 
@@ -1817,7 +1817,7 @@ class NeonSyncsWindow(QWidget):
 
         if hasattr(self, "btn_lang"):
             cur_lang = get_language()
-            self.btn_lang.setText(f"{cur_lang.upper()} \u25be")
+            self.btn_lang.setText(f"\u25be {cur_lang.upper()}" if rtl else f"{cur_lang.upper()} \u25be")
             self.btn_lang.setToolTip(tr("tooltip_language"))
             self.btn_lang.setLayoutDirection(direction)
             self.update_globe_pixmap()
