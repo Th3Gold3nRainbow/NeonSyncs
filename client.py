@@ -54,10 +54,10 @@ from i18n import tr, get_language, set_language, is_rtl, save_user_language, SUP
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLineEdit, QLabel, QFileDialog, QListWidget, QSplitter, QFrame,
-    QShortcut, QSlider, QComboBox, QGraphicsDropShadowEffect
+    QShortcut, QSlider, QComboBox, QGraphicsDropShadowEffect, QMenu, QAction
 )
 from PyQt5.QtGui import QKeySequence, QIcon, QColor, QFontDatabase, QFont, QPixmap, QImage, QPainter
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QUrl, pyqtSlot
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QUrl, pyqtSlot, QPoint, QSize
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtWebChannel import QWebChannel
 from PyQt5.QtSvg import QSvgRenderer
@@ -248,9 +248,9 @@ QLabel[role="brand"] {{
     background: transparent;
     border: none;
     font-family: {THEME['font_display']};
-    font-size: 13pt;
+    font-size: 12pt;
     font-weight: 900;
-    letter-spacing: 1.5px;
+    letter-spacing: 1.2px;
 }}
 QLabel[role="website_link"] {{
     background: transparent;
@@ -388,12 +388,52 @@ QComboBox QAbstractItemView {{
     color: {THEME['text_primary']};
     padding: 4px;
 }}
-QComboBox#langSelector {{
-    padding: 3px 6px;
-    font-size: 8.5pt;
+QPushButton#langButton {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 240, 255, 0.08), stop:1 rgba(0, 240, 255, 0.02));
+    border: 1px solid rgba(0, 240, 255, 0.35);
+    border-radius: 8px;
+    padding: 6px 10px;
+    color: {THEME['text_primary']};
+    font-family: {THEME['font_display']};
+    font-size: 9.5pt;
+    font-weight: 700;
+}}
+QPushButton#langButton:hover {{
+    border: 1px solid {THEME['accent_primary']};
+    color: {THEME['accent_primary']};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 240, 255, 0.22), stop:1 rgba(0, 240, 255, 0.08));
+}}
+QPushButton#langButton:focus {{
+    border: 1px solid {THEME['accent_primary']};
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(0, 240, 255, 0.18), stop:1 rgba(0, 240, 255, 0.05));
+}}
+QPushButton#langButton:pressed {{
+    background-color: {THEME['bg_window']};
+}}
+
+QMenu#langMenu {{
+    background-color: {THEME['bg_panel']};
+    border: 1px solid {THEME['border_focus']};
+    border-radius: 8px;
+    padding: 6px;
+    color: {THEME['text_primary']};
     font-family: {THEME['font_body']};
+    font-size: 10pt;
+}}
+QMenu#langMenu::item {{
+    background: transparent;
+    padding: 7px 24px 7px 24px;
     border-radius: 6px;
-    min-width: 78px;
+    color: {THEME['text_primary']};
+    margin: 2px 0;
+}}
+QMenu#langMenu::item:selected {{
+    background-color: rgba(0, 240, 255, 0.18);
+    color: {THEME['accent_primary']};
+}}
+QMenu#langMenu::indicator {{
+    width: 14px;
+    height: 14px;
 }}
 
 QListWidget {{
@@ -566,6 +606,16 @@ def format_time(seconds):
     if h:
         return f"{h}:{m:02d}:{s:02d}"
     return f"{m}:{s:02d}"
+
+
+class LanguageButton(QPushButton):
+    """Bouton de sélection de la langue courante (icône globe HiDPI + code + flèche)."""
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space, Qt.Key_Down):
+            self.click()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class NetworkClient(QObject):
@@ -881,14 +931,49 @@ class NeonSyncsWindow(QWidget):
         self.logo_label.setPixmap(pix)
         self.logo_label.setFixedSize(logical_size, logical_size)
 
+    def update_globe_pixmap(self):
+        """Rend l'icône vectorielle SVG du globe dans un QPixmap avec antialiasing,
+        SmoothPixmapTransform et prise en compte exacte du devicePixelRatio (HiDPI 100%, 125%, 150%, 200%)."""
+        if not hasattr(self, "btn_lang"):
+            return
+        svg_path = resource_path(os.path.join("assets", "icons", "globe.svg"))
+        if not os.path.exists(svg_path):
+            return
+
+        renderer = QSvgRenderer(svg_path)
+        if not renderer.isValid():
+            return
+
+        dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+        logical_size = 16
+        pixel_size = max(1, int(round(logical_size * dpr)))
+
+        img = QImage(pixel_size, pixel_size, QImage.Format_ARGB32_Premultiplied)
+        img.fill(QColor(0, 0, 0, 0))
+
+        painter = QPainter(img)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        renderer.render(painter)
+        painter.end()
+
+        pix = QPixmap.fromImage(img)
+        pix.setDevicePixelRatio(dpr)
+        icon = QIcon(pix)
+        self.btn_lang.setIcon(icon)
+        self.btn_lang.setIconSize(QSize(logical_size, logical_size))
+
     def showEvent(self, event):
         super().showEvent(event)
         self.update_logo_pixmap()
+        self.update_globe_pixmap()
 
     def changeEvent(self, event):
         super().changeEvent(event)
         if hasattr(self, "logo_label"):
             self.update_logo_pixmap()
+        if hasattr(self, "btn_lang"):
+            self.update_globe_pixmap()
 
     def __init__(self):
         super().__init__()
@@ -1115,14 +1200,14 @@ class NeonSyncsWindow(QWidget):
         brand_layout.setContentsMargins(0, 0, 0, 4)
         brand_layout.setSpacing(0)
 
-        # Sous-conteneur horizontal logo + nom (espacement 10px, centrage vertical)
+        # Sous-conteneur horizontal logo + nom (espacement 8px, centrage vertical)
         self.brand_info_widget = QWidget()
         self.brand_info_widget.setObjectName("brandInfoWidget")
         self.brand_info_widget.setStyleSheet("background: transparent; border: none;")
         self.brand_info_widget.setLayoutDirection(Qt.LeftToRight)
         brand_info_layout = QHBoxLayout(self.brand_info_widget)
         brand_info_layout.setContentsMargins(0, 0, 0, 0)
-        brand_info_layout.setSpacing(10)
+        brand_info_layout.setSpacing(8)
         brand_info_layout.setAlignment(Qt.AlignVCenter)
 
         self.logo_label = QLabel()
@@ -1135,8 +1220,12 @@ class NeonSyncsWindow(QWidget):
         c_prim = THEME["accent_primary"]
         c_sec = THEME["accent_secondary"]
         name_upper = APP_NAME.upper()
-        neon_part = name_upper[:4]   # "NEON"
-        syncs_part = name_upper[4:]  # "SYNCS"
+        if name_upper.startswith("NEON"):
+            neon_part = name_upper[:4]
+            syncs_part = name_upper[4:]
+        else:
+            neon_part = name_upper
+            syncs_part = ""
         self.brand_title = QLabel(
             f'<span style="color:{c_prim}; font-weight:900;">{neon_part}</span>'
             f'<span style="color:{c_sec}; font-weight:900;">{syncs_part}</span>'
@@ -1149,19 +1238,29 @@ class NeonSyncsWindow(QWidget):
         brand_layout.addWidget(self.brand_info_widget, 0, Qt.AlignVCenter)
         brand_layout.addStretch(1)
 
-        # Sélecteur de langue dans l'application (Phase 3 bis)
-        self.combo_lang = QComboBox()
-        self.combo_lang.setObjectName("langSelector")
-        self.combo_lang.setLayoutDirection(Qt.LeftToRight)
-        self.combo_lang.addItem("English", "en")
-        self.combo_lang.addItem("Français", "fr")
-        self.combo_lang.addItem("Русский", "ru")
-        self.combo_lang.addItem("العربية", "ar")
+        # Bouton sélecteur de langue avec menu contextuel néon
+        self.btn_lang = LanguageButton()
+        self.btn_lang.setObjectName("langButton")
+        self.btn_lang.setCursor(Qt.PointingHandCursor)
+        self.btn_lang.setLayoutDirection(Qt.RightToLeft if is_rtl() else Qt.LeftToRight)
         cur_lang = get_language()
-        lang_idx = {"en": 0, "fr": 1, "ru": 2, "ar": 3}.get(cur_lang, 0)
-        self.combo_lang.setCurrentIndex(lang_idx)
-        self.combo_lang.currentIndexChanged.connect(self.on_language_changed)
-        brand_layout.addWidget(self.combo_lang, 0, Qt.AlignVCenter)
+        self.btn_lang.setText(f"\u25be {cur_lang.upper()}" if is_rtl() else f"{cur_lang.upper()} \u25be")
+        self.btn_lang.setToolTip(tr("tooltip_language"))
+        self.update_globe_pixmap()
+
+        self.lang_menu = QMenu(self)
+        self.lang_menu.setObjectName("langMenu")
+        self.lang_actions = {}
+        for name, code in [("English", "en"), ("Français", "fr"), ("Русский", "ru"), ("العربية", "ar")]:
+            act = self.lang_menu.addAction(name)
+            act.setCheckable(True)
+            act.setData(code)
+            act.setChecked(code == cur_lang)
+            act.triggered.connect(lambda checked, c=code: self.on_language_selected(c))
+            self.lang_actions[code] = act
+
+        self.btn_lang.clicked.connect(self.show_language_menu)
+        brand_layout.addWidget(self.btn_lang, 0, Qt.AlignVCenter)
 
         right.addWidget(self.brand_header)
 
@@ -1559,13 +1658,54 @@ class NeonSyncsWindow(QWidget):
         if state:
             self.set_status_state(state)
 
-    def on_language_changed(self, index: int):
-        code = self.combo_lang.itemData(index)
+    def show_language_menu(self):
+        if self.lang_menu.isVisible():
+            self.lang_menu.close()
+            return
+
+        cur_lang = get_language()
+        for act in self.lang_menu.actions():
+            act.setChecked(act.data() == cur_lang)
+
+        rtl = is_rtl()
+        self.lang_menu.setLayoutDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)
+
+        menu_size = self.lang_menu.sizeHint()
+        btn_pos = self.btn_lang.mapToGlobal(QPoint(0, self.btn_lang.height() + 2))
+
+        window = self.window()
+        win_pos = window.mapToGlobal(QPoint(0, 0))
+        win_w = window.width()
+        win_h = window.height()
+
+        if rtl:
+            # Align left edge of menu with left edge of button
+            x = btn_pos.x()
+        else:
+            # Align right edge of menu with right edge of button
+            x = btn_pos.x() + self.btn_lang.width() - menu_size.width()
+
+        y = btn_pos.y()
+
+        # Clamp strictly within window boundaries
+        x = max(win_pos.x() + 4, min(x, win_pos.x() + win_w - menu_size.width() - 4))
+        y = max(win_pos.y() + 4, min(y, win_pos.y() + win_h - menu_size.height() - 4))
+
+        self.lang_menu.popup(QPoint(x, y))
+
+    def on_language_selected(self, code: str):
         if not code or code == get_language():
             return
         set_language(code)
         save_user_language(code)
         self.retranslate_ui()
+
+    def on_language_changed(self, code):
+        """Compatibilité ascendante avec l'ancien gestionnaire de langue."""
+        if isinstance(code, int):
+            langs = ["en", "fr", "ru", "ar"]
+            code = langs[code] if 0 <= code < len(langs) else "en"
+        self.on_language_selected(code)
 
     def add_user_chat_message(self, sender: str, message: str):
         self.chat_history.append({"type": "user", "sender": sender, "message": message})
@@ -1675,11 +1815,18 @@ class NeonSyncsWindow(QWidget):
 
         self.update_logo_pixmap()
 
-        if hasattr(self, "combo_lang"):
-            self.combo_lang.blockSignals(True)
-            idx = {"en": 0, "fr": 1, "ru": 2, "ar": 3}.get(get_language(), 0)
-            self.combo_lang.setCurrentIndex(idx)
-            self.combo_lang.blockSignals(False)
+        if hasattr(self, "btn_lang"):
+            cur_lang = get_language()
+            self.btn_lang.setText(f"\u25be {cur_lang.upper()}" if rtl else f"{cur_lang.upper()} \u25be")
+            self.btn_lang.setToolTip(tr("tooltip_language"))
+            self.btn_lang.setLayoutDirection(direction)
+            self.update_globe_pixmap()
+
+        if hasattr(self, "lang_menu"):
+            cur_lang = get_language()
+            self.lang_menu.setLayoutDirection(direction)
+            for act in self.lang_menu.actions():
+                act.setChecked(act.data() == cur_lang)
 
         self.style().unpolish(self)
         self.style().polish(self)

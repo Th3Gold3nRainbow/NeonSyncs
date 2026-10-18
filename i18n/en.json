@@ -63,5 +63,6 @@
   "warning_no_file": "No file open. Host is playing: {file}",
   "warning_different_file": "Different file from host ({details}) — sync suspended.",
   "dialog_open_video_title": "Select a video",
-  "dialog_open_video_filter": "Video files (*.mp4 *.mkv *.avi *.mov *.webm *.flv *.ts *.m4v);;All files (*.*)"
+  "dialog_open_video_filter": "Video files (*.mp4 *.mkv *.avi *.mov *.webm *.flv *.ts *.m4v);;All files (*.*)",
+  "tooltip_language": "Language"
 }

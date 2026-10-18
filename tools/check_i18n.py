@@ -212,7 +212,8 @@ def check_hot_language_switch(catalogs):
         "NeonSyncs", "neonsyncs.com", "https://neonsyncs.com",
         "127.0.0.1", "8999", "0:00",
         "10s ⏩", "30s ⏩", "⏪ 10s", "⏪ 30s",
-        "English", "Français", "Русский", "العربية"
+        "English", "Français", "Русский", "العربية",
+        "EN ▾", "FR ▾", "RU ▾", "AR ▾", "▾ AR"
     }
 
     def collect_ui_texts(window):
@@ -235,7 +236,7 @@ def check_hot_language_switch(catalogs):
             if ph:
                 items[f"QLineEdit_ph_{child.objectName() or idx}"] = ph
         for idx, child in enumerate(window.findChildren(QComboBox)):
-            if child is not window.combo_lang:
+            if child is not getattr(window, "combo_lang", None):
                 for i in range(child.count()):
                     items[f"QComboBox_{child.objectName() or idx}_{i}"] = child.itemText(i)
         return items
