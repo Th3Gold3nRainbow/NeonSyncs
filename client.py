@@ -248,9 +248,9 @@ QLabel[role="brand"] {{
     background: transparent;
     border: none;
     font-family: {THEME['font_display']};
-    font-size: 13pt;
+    font-size: 12pt;
     font-weight: 900;
-    letter-spacing: 1.5px;
+    letter-spacing: 1.2px;
 }}
 QLabel[role="website_link"] {{
     background: transparent;
@@ -1200,14 +1200,14 @@ class NeonSyncsWindow(QWidget):
         brand_layout.setContentsMargins(0, 0, 0, 4)
         brand_layout.setSpacing(0)
 
-        # Sous-conteneur horizontal logo + nom (espacement 10px, centrage vertical)
+        # Sous-conteneur horizontal logo + nom (espacement 8px, centrage vertical)
         self.brand_info_widget = QWidget()
         self.brand_info_widget.setObjectName("brandInfoWidget")
         self.brand_info_widget.setStyleSheet("background: transparent; border: none;")
         self.brand_info_widget.setLayoutDirection(Qt.LeftToRight)
         brand_info_layout = QHBoxLayout(self.brand_info_widget)
         brand_info_layout.setContentsMargins(0, 0, 0, 0)
-        brand_info_layout.setSpacing(10)
+        brand_info_layout.setSpacing(8)
         brand_info_layout.setAlignment(Qt.AlignVCenter)
 
         self.logo_label = QLabel()
@@ -1220,8 +1220,12 @@ class NeonSyncsWindow(QWidget):
         c_prim = THEME["accent_primary"]
         c_sec = THEME["accent_secondary"]
         name_upper = APP_NAME.upper()
-        neon_part = name_upper[:4]   # "NEON"
-        syncs_part = name_upper[4:]  # "SYNCS"
+        if name_upper.startswith("NEON"):
+            neon_part = name_upper[:4]
+            syncs_part = name_upper[4:]
+        else:
+            neon_part = name_upper
+            syncs_part = ""
         self.brand_title = QLabel(
             f'<span style="color:{c_prim}; font-weight:900;">{neon_part}</span>'
             f'<span style="color:{c_sec}; font-weight:900;">{syncs_part}</span>'
