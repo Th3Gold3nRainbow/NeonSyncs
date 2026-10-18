@@ -49,7 +49,10 @@ import threading
 import time
 import random
 
-from i18n import tr, get_language, set_language, is_rtl, save_user_language, SUPPORTED_LANGUAGES, has_key
+from i18n import (
+    tr, get_language, set_language, is_rtl, save_user_language,
+    SUPPORTED_LANGUAGES, has_key, load_settings, save_settings
+)
 
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
@@ -897,6 +900,8 @@ class NeonSyncsWindow(QWidget):
     fs_exit_requested = pyqtSignal()
     seek_requested = pyqtSignal(float)
     pause_toggle_requested = pyqtSignal()
+    mpv_volume_signal = pyqtSignal(float)
+    mpv_mute_signal = pyqtSignal(bool)
 
     def update_logo_pixmap(self):
         """Rend le logo vectoriel SVG dans un QPixmap avec antialiasing,
@@ -963,10 +968,63 @@ class NeonSyncsWindow(QWidget):
         self.btn_lang.setIcon(icon)
         self.btn_lang.setIconSize(QSize(logical_size, logical_size))
 
+    def update_volume_icon(self):
+        """Met a jour l'icone vectorielle et les infobulles du controle de volume
+        selon le niveau courant et l'etat muet (HiDPI / SVG)."""
+        if not hasattr(self, "btn_volume") or not hasattr(self, "volume_slider"):
+            return
+
+        is_muted = getattr(self, "volume_muted", False)
+        vol = getattr(self, "current_volume", 100.0)
+
+        if is_muted or vol <= 0.0:
+            icon_name = "volume-mute.svg"
+            fallback_char = "🔇"
+            btn_tooltip = tr("tooltip_unmute")
+        elif vol < 50.0:
+            icon_name = "volume-low.svg"
+            fallback_char = "🔉"
+            btn_tooltip = tr("tooltip_mute")
+        else:
+            icon_name = "volume-high.svg"
+            fallback_char = "🔊"
+            btn_tooltip = tr("tooltip_mute")
+
+        svg_path = resource_path(os.path.join("assets", "icons", icon_name))
+        rendered = False
+        if os.path.exists(svg_path):
+            renderer = QSvgRenderer(svg_path)
+            if renderer.isValid():
+                dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+                logical_size = 16
+                pixel_size = max(1, int(round(logical_size * dpr)))
+                img = QImage(pixel_size, pixel_size, QImage.Format_ARGB32_Premultiplied)
+                img.fill(QColor(0, 0, 0, 0))
+                painter = QPainter(img)
+                painter.setRenderHint(QPainter.Antialiasing, True)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+                renderer.render(painter)
+                painter.end()
+                pix = QPixmap.fromImage(img)
+                pix.setDevicePixelRatio(dpr)
+                self.btn_volume.setIcon(QIcon(pix))
+                self.btn_volume.setIconSize(QSize(logical_size, logical_size))
+                self.btn_volume.setText("")
+                rendered = True
+
+        if not rendered:
+            self.btn_volume.setIcon(QIcon())
+            self.btn_volume.setText(fallback_char)
+
+        vol_int = int(round(vol))
+        self.btn_volume.setToolTip(f"{btn_tooltip} ({vol_int}%)")
+        self.volume_slider.setToolTip(f"{tr('tooltip_volume')}: {vol_int}%")
+
     def showEvent(self, event):
         super().showEvent(event)
         self.update_logo_pixmap()
         self.update_globe_pixmap()
+        self.update_volume_icon()
 
     def changeEvent(self, event):
         super().changeEvent(event)
@@ -974,6 +1032,8 @@ class NeonSyncsWindow(QWidget):
             self.update_logo_pixmap()
         if hasattr(self, "btn_lang"):
             self.update_globe_pixmap()
+        if hasattr(self, "btn_volume"):
+            self.update_volume_icon()
 
     def __init__(self):
         super().__init__()
@@ -1014,6 +1074,17 @@ class NeonSyncsWindow(QWidget):
         self._room_is_default = True
         self._id_copied = False
 
+        settings = load_settings()
+        raw_vol = settings.get("volume", 100)
+        try:
+            self.current_volume = float(raw_vol)
+            if not (0.0 <= self.current_volume <= 100.0):
+                self.current_volume = 100.0
+        except (ValueError, TypeError):
+            self.current_volume = 100.0
+        self.volume_muted = bool(settings.get("muted", False))
+        self._updating_volume_ui = False
+
         self._build_ui()
         self._init_mpv()
         self.setStyleSheet(STYLE_SHEET)
@@ -1025,6 +1096,8 @@ class NeonSyncsWindow(QWidget):
         self.fs_exit_requested.connect(self.exit_fullscreen)
         self.seek_requested.connect(self.seek_relative)
         self.pause_toggle_requested.connect(self.toggle_pause)
+        self.mpv_volume_signal.connect(self.on_mpv_volume_changed)
+        self.mpv_mute_signal.connect(self.on_mpv_mute_changed)
 
         # Raccourcis clavier côté Qt (utile si le focus est hors de la
         # zone vidéo, par ex. sur le panneau latéral).
@@ -1168,12 +1241,34 @@ class NeonSyncsWindow(QWidget):
         self.btn_fwd30.clicked.connect(lambda: self.seek_relative(30))
         self.btn_fullscreen = QPushButton(tr("fullscreen"))
         self.btn_fullscreen.clicked.connect(self.toggle_fullscreen)
+
+        self.btn_volume = QPushButton()
+        self.btn_volume.setObjectName("btn_volume")
+        self.btn_volume.setProperty("role", "small")
+        self.btn_volume.setFixedSize(34, 30)
+        self.btn_volume.setCursor(Qt.PointingHandCursor)
+        self.btn_volume.clicked.connect(self.toggle_mute)
+
+        self.volume_slider = QSlider(Qt.Horizontal)
+        self.volume_slider.setObjectName("volume_slider")
+        self.volume_slider.setLayoutDirection(Qt.LeftToRight)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setSingleStep(5)
+        self.volume_slider.setPageStep(10)
+        self.volume_slider.setFixedWidth(90)
+        self.volume_slider.setValue(int(round(self.current_volume)))
+        self.volume_slider.valueChanged.connect(self.on_volume_slider_changed)
+
+        self.update_volume_icon()
+
         controls.addWidget(self.btn_open)
         controls.addWidget(self.btn_back30)
         controls.addWidget(self.btn_back10)
         controls.addWidget(self.btn_play)
         controls.addWidget(self.btn_fwd10)
         controls.addWidget(self.btn_fwd30)
+        controls.addWidget(self.btn_volume)
+        controls.addWidget(self.volume_slider)
         controls.addWidget(self.btn_fullscreen)
         controls_container.addLayout(controls)
 
@@ -1444,7 +1539,14 @@ class NeonSyncsWindow(QWidget):
                 input_vo_keyboard=True,
                 osc=True,
                 hwdec="no",
+                volume_max=100,
             )
+
+            try:
+                self.player.volume = self.current_volume
+                self.player.mute = self.volume_muted
+            except Exception:
+                pass
 
             @self.player.property_observer("pause")
             def _on_pause_change(_name, value):
@@ -1457,6 +1559,16 @@ class NeonSyncsWindow(QWidget):
                 if self.applying_remote:
                     return
                 self.push_state()
+
+            @self.player.property_observer("volume")
+            def _on_mpv_volume(_name, value):
+                if value is not None:
+                    self.mpv_volume_signal.emit(float(value))
+
+            @self.player.property_observer("mute")
+            def _on_mpv_mute(_name, value):
+                if value is not None:
+                    self.mpv_mute_signal.emit(bool(value))
 
             for key in ("f", "F11", "MBTN_LEFT_DBL", "SPACE"):
                 try:
@@ -1501,6 +1613,63 @@ class NeonSyncsWindow(QWidget):
                 self.seek_requested.emit(-60)
         except Exception:
             self.player = None
+
+    def toggle_mute(self):
+        self.volume_muted = not self.volume_muted
+        if self.player:
+            try:
+                self.player.mute = self.volume_muted
+            except Exception:
+                pass
+        self.update_volume_icon()
+        self._save_volume_settings()
+
+    def on_volume_slider_changed(self, value):
+        if getattr(self, "_updating_volume_ui", False):
+            return
+        self.current_volume = float(value)
+        if self.volume_muted and value > 0:
+            self.volume_muted = False
+        if self.player:
+            try:
+                self.player.volume = self.current_volume
+                self.player.mute = self.volume_muted
+            except Exception:
+                pass
+        self.update_volume_icon()
+        self._save_volume_settings()
+
+    def on_mpv_volume_changed(self, vol):
+        vol = max(0.0, min(100.0, float(vol)))
+        if abs(self.current_volume - vol) < 0.5:
+            return
+        self.current_volume = vol
+        self._updating_volume_ui = True
+        try:
+            self.volume_slider.blockSignals(True)
+            self.volume_slider.setValue(int(round(vol)))
+            self.volume_slider.blockSignals(False)
+        finally:
+            self._updating_volume_ui = False
+        self.update_volume_icon()
+        self._save_volume_settings()
+
+    def on_mpv_mute_changed(self, muted):
+        muted = bool(muted)
+        if self.volume_muted == muted:
+            return
+        self.volume_muted = muted
+        self.update_volume_icon()
+        self._save_volume_settings()
+
+    def _save_volume_settings(self):
+        try:
+            settings = load_settings()
+            settings["volume"] = int(round(self.current_volume))
+            settings["muted"] = bool(self.volume_muted)
+            save_settings(settings)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Actions locales
@@ -1746,6 +1915,8 @@ class NeonSyncsWindow(QWidget):
         self.btn_fwd10.setText(tr("fwd_10"))
         self.btn_fwd30.setText(tr("fwd_30"))
         self.btn_fullscreen.setText(tr("fullscreen"))
+        if hasattr(self, "update_volume_icon"):
+            self.update_volume_icon()
 
         self.lbl_conn.setText(tr("section_connection"))
         self.combo_mode.setItemText(0, tr("mode_p2p"))

@@ -64,5 +64,8 @@
   "warning_different_file": "Fichier différent de l'hôte ({details}) — synchronisation suspendue.",
   "dialog_open_video_title": "Choisir un fichier vidéo",
   "dialog_open_video_filter": "Fichiers vidéo (*.mp4 *.mkv *.avi *.mov *.webm *.flv *.ts *.m4v);;Tous les fichiers (*.*)",
-  "tooltip_language": "Langue"
+  "tooltip_language": "Langue",
+  "tooltip_volume": "Volume",
+  "tooltip_mute": "Couper le son",
+  "tooltip_unmute": "Activer le son"
 }
