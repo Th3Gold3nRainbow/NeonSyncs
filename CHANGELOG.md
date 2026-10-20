@@ -5,7 +5,7 @@ All notable changes to NeonSyncs are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.4.0] - 2026-10-20
 
 ### Added
 - Local subtitles support with external subtitle file loading (SRT, ASS/SSA, VTT, SUB), embedded and external track selection, and subtitle delay adjustment.
