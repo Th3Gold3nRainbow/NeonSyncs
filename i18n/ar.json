@@ -67,5 +67,20 @@
   "tooltip_language": "اللغة",
   "tooltip_volume": "مستوى الصوت",
   "tooltip_mute": "كتم الصوت",
-  "tooltip_unmute": "إلغاء كتم الصوت"
+  "tooltip_unmute": "إلغاء كتم الصوت",
+  "subtitles": "الترجمة",
+  "subtitles_load": "تحميل ملف ترجمة…",
+  "subtitles_off": "إيقاف",
+  "subtitles_no_tracks": "لا توجد مسارات ترجمة",
+  "subtitles_track_n": "المسار {id}",
+  "subtitles_external": "خارجي",
+  "subtitles_delay": "تأخير",
+  "subtitles_delay_value": "التأخير: {value} ث",
+  "subtitles_delay_minus": "تأخير −0.1 ث",
+  "subtitles_delay_plus": "تأخير +0.1 ث",
+  "subtitles_delay_reset": "إعادة ضبط التأخير",
+  "dialog_load_subtitles_title": "تحميل ملف الترجمة",
+  "filter_subtitle_files": "ملفات الترجمة",
+  "filter_all_files": "كافة الملفات",
+  "error_load_subtitles": "تعذر تحميل ملف الترجمة"
 }

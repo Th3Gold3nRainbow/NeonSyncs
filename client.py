@@ -18,6 +18,7 @@ Lancement :
 Plein écran :
   - Touche F ou F11, ou double-clic sur la vidéo, pour basculer.
   - Échap pour quitter le plein écran.
+  - Barre d'espace pour basculer lecture/pause en plein écran.
   - En plein écran : aucune barre, aucun panneau, aucune bordure —
     uniquement l'image vidéo.
   - IMPORTANT : après toute modification de ce fichier, il faut
@@ -25,8 +26,8 @@ Plein écran :
     l'ancienne version reste utilisée.
 
 Avancer / reculer :
-  - Boutons ⏪10s / ⏪30s / 30s⏩ / 10s⏩ dans la barre de contrôle.
-  - Flèches gauche/droite (±10s) et haut/bas (±60s) du clavier,
+  - Boutons ⏪10s / 10s⏩ dans la barre de contrôle.
+  - Flèches gauche/droite (±10s) du clavier,
     liées explicitement (fiables même quand la vidéo a le focus),
     synchronisées avec les autres participants.
   - Barre de progression glissable (au-dessus des boutons) : cliquez
@@ -414,7 +415,7 @@ QPushButton#langButton:pressed {{
     background-color: {THEME['bg_window']};
 }}
 
-QMenu#langMenu {{
+QMenu#langMenu, QMenu#subtitlesMenu {{
     background-color: {THEME['bg_panel']};
     border: 1px solid {THEME['border_focus']};
     border-radius: 8px;
@@ -423,20 +424,28 @@ QMenu#langMenu {{
     font-family: {THEME['font_body']};
     font-size: 10pt;
 }}
-QMenu#langMenu::item {{
+QMenu#langMenu::item, QMenu#subtitlesMenu::item {{
     background: transparent;
     padding: 7px 24px 7px 24px;
     border-radius: 6px;
     color: {THEME['text_primary']};
     margin: 2px 0;
 }}
-QMenu#langMenu::item:selected {{
+QMenu#langMenu::item:selected, QMenu#subtitlesMenu::item:selected {{
     background-color: rgba(0, 240, 255, 0.18);
     color: {THEME['accent_primary']};
 }}
-QMenu#langMenu::indicator {{
+QMenu#langMenu::indicator, QMenu#subtitlesMenu::indicator {{
     width: 14px;
     height: 14px;
+}}
+QMenu#subtitlesMenu::separator {{
+    height: 1px;
+    background: {THEME['border_default']};
+    margin: 4px 8px;
+}}
+QMenu#subtitlesMenu::item:disabled {{
+    color: {THEME['text_muted']};
 }}
 
 QListWidget {{
@@ -903,6 +912,7 @@ class NeonSyncsWindow(QWidget):
     pause_toggle_requested = pyqtSignal()
     mpv_volume_signal = pyqtSignal(float)
     mpv_mute_signal = pyqtSignal(bool)
+    mpv_sub_signal = pyqtSignal()
 
     def update_logo_pixmap(self):
         """Rend le logo vectoriel SVG dans un QPixmap avec antialiasing,
@@ -1021,11 +1031,90 @@ class NeonSyncsWindow(QWidget):
         self.btn_volume.setToolTip(f"{btn_tooltip} ({vol_int}%)")
         self.volume_slider.setToolTip(f"{tr('tooltip_volume')}: {vol_int}%")
 
+    def update_subtitles_icon(self):
+        """Rend l'icône vectorielle SVG des sous-titres selon l'état d'affichage (HiDPI / SVG)."""
+        if not hasattr(self, "btn_subtitles"):
+            return
+
+        sub_active = False
+        if getattr(self, "player", None):
+            try:
+                sid = self.player.sid
+                vis = getattr(self.player, "sub_visibility", True)
+                if sid not in (False, None, "no", 0) and vis is not False:
+                    sub_active = True
+            except Exception:
+                sub_active = False
+
+        icon_name = "subtitles.svg" if sub_active else "subtitles-off.svg"
+        svg_path = resource_path(os.path.join("assets", "icons", icon_name))
+        rendered = False
+        if os.path.exists(svg_path):
+            renderer = QSvgRenderer(svg_path)
+            if renderer.isValid():
+                dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+                logical_size = 16
+                pixel_size = max(1, int(round(logical_size * dpr)))
+                img = QImage(pixel_size, pixel_size, QImage.Format_ARGB32_Premultiplied)
+                img.fill(QColor(0, 0, 0, 0))
+                painter = QPainter(img)
+                painter.setRenderHint(QPainter.Antialiasing, True)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+                renderer.render(painter)
+                painter.end()
+                pix = QPixmap.fromImage(img)
+                pix.setDevicePixelRatio(dpr)
+                self.btn_subtitles.setIcon(QIcon(pix))
+                self.btn_subtitles.setIconSize(QSize(logical_size, logical_size))
+                self.btn_subtitles.setText("")
+                rendered = True
+
+        if not rendered:
+            self.btn_subtitles.setIcon(QIcon())
+            self.btn_subtitles.setText("CC")
+
+        self.btn_subtitles.setToolTip(tr("subtitles"))
+
+    def update_fullscreen_icon(self):
+        """Rend l'icône vectorielle SVG de plein écran dans le bouton compact (HiDPI / SVG)."""
+        if not hasattr(self, "btn_fullscreen"):
+            return
+
+        svg_path = resource_path(os.path.join("assets", "icons", "fullscreen.svg"))
+        rendered = False
+        if os.path.exists(svg_path):
+            renderer = QSvgRenderer(svg_path)
+            if renderer.isValid():
+                dpr = self.devicePixelRatioF() if hasattr(self, "devicePixelRatioF") else 1.0
+                logical_size = 16
+                pixel_size = max(1, int(round(logical_size * dpr)))
+                img = QImage(pixel_size, pixel_size, QImage.Format_ARGB32_Premultiplied)
+                img.fill(QColor(0, 0, 0, 0))
+                painter = QPainter(img)
+                painter.setRenderHint(QPainter.Antialiasing, True)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+                renderer.render(painter)
+                painter.end()
+                pix = QPixmap.fromImage(img)
+                pix.setDevicePixelRatio(dpr)
+                self.btn_fullscreen.setIcon(QIcon(pix))
+                self.btn_fullscreen.setIconSize(QSize(logical_size, logical_size))
+                self.btn_fullscreen.setText("")
+                rendered = True
+
+        if not rendered:
+            self.btn_fullscreen.setIcon(QIcon())
+            self.btn_fullscreen.setText("FS")
+
+        self.btn_fullscreen.setToolTip(tr("fullscreen"))
+
     def showEvent(self, event):
         super().showEvent(event)
         self.update_logo_pixmap()
         self.update_globe_pixmap()
+        self.update_subtitles_icon()
         self.update_volume_icon()
+        self.update_fullscreen_icon()
 
     def changeEvent(self, event):
         super().changeEvent(event)
@@ -1033,8 +1122,12 @@ class NeonSyncsWindow(QWidget):
             self.update_logo_pixmap()
         if hasattr(self, "btn_lang"):
             self.update_globe_pixmap()
+        if hasattr(self, "btn_subtitles"):
+            self.update_subtitles_icon()
         if hasattr(self, "btn_volume"):
             self.update_volume_icon()
+        if hasattr(self, "btn_fullscreen"):
+            self.update_fullscreen_icon()
 
     def __init__(self):
         super().__init__()
@@ -1101,6 +1194,12 @@ class NeonSyncsWindow(QWidget):
         self.pause_toggle_requested.connect(self.toggle_pause)
         self.mpv_volume_signal.connect(self.on_mpv_volume_changed)
         self.mpv_mute_signal.connect(self.on_mpv_mute_changed)
+        self.mpv_sub_signal.connect(self.update_subtitles_icon)
+
+        # Raccourci Espace : désactivé par défaut, activé uniquement en plein écran
+        self.shortcut_space = QShortcut(QKeySequence(Qt.Key_Space), self, self.toggle_pause)
+        self.shortcut_space.setAutoRepeat(False)
+        self.shortcut_space.setEnabled(False)
 
         # Raccourcis clavier côté Qt (utile si le focus est hors de la
         # zone vidéo, par ex. sur le panneau latéral).
@@ -1109,8 +1208,6 @@ class NeonSyncsWindow(QWidget):
         QShortcut(QKeySequence(Qt.Key_Escape), self, self.exit_fullscreen)
         QShortcut(QKeySequence(Qt.Key_Right), self, lambda: self.seek_relative(10))
         QShortcut(QKeySequence(Qt.Key_Left), self, lambda: self.seek_relative(-10))
-        QShortcut(QKeySequence(Qt.Key_Up), self, lambda: self.seek_relative(60))
-        QShortcut(QKeySequence(Qt.Key_Down), self, lambda: self.seek_relative(-60))
 
         self.send_timer = QTimer(self)
         self.send_timer.timeout.connect(self.periodic_state_push)
@@ -1227,12 +1324,10 @@ class NeonSyncsWindow(QWidget):
         progress_row.addWidget(self.time_total_label)
         controls_container.addLayout(progress_row)
 
-        # --- Boutons (ouvrir, avance/retour, lecture, plein écran) ---
+        # --- Boutons (ouvrir, saut 10s, lecture, sous-titres, volume, plein écran) ---
         controls = QHBoxLayout()
         self.btn_open = QPushButton(tr("open_file"))
         self.btn_open.clicked.connect(self.open_file)
-        self.btn_back30 = QPushButton(tr("back_30"))
-        self.btn_back30.clicked.connect(lambda: self.seek_relative(-30))
         self.btn_back10 = QPushButton(tr("back_10"))
         self.btn_back10.clicked.connect(lambda: self.seek_relative(-10))
         self.btn_play = QPushButton(tr("play_pause"))
@@ -1241,10 +1336,17 @@ class NeonSyncsWindow(QWidget):
         self.btn_play.clicked.connect(self.toggle_pause)
         self.btn_fwd10 = QPushButton(tr("fwd_10"))
         self.btn_fwd10.clicked.connect(lambda: self.seek_relative(10))
-        self.btn_fwd30 = QPushButton(tr("fwd_30"))
-        self.btn_fwd30.clicked.connect(lambda: self.seek_relative(30))
-        self.btn_fullscreen = QPushButton(tr("fullscreen"))
-        self.btn_fullscreen.clicked.connect(self.toggle_fullscreen)
+
+        self.btn_subtitles = QPushButton()
+        self.btn_subtitles.setObjectName("btn_subtitles")
+        self.btn_subtitles.setProperty("role", "small")
+        self.btn_subtitles.setFixedSize(34, 30)
+        self.btn_subtitles.setCursor(Qt.PointingHandCursor)
+        self.btn_subtitles.clicked.connect(self.show_subtitles_menu)
+
+        self.subtitles_menu = QMenu(self)
+        self.subtitles_menu.setObjectName("subtitlesMenu")
+        self.subtitles_menu.aboutToShow.connect(self._build_subtitles_menu)
 
         self.btn_volume = QPushButton()
         self.btn_volume.setObjectName("btn_volume")
@@ -1263,14 +1365,22 @@ class NeonSyncsWindow(QWidget):
         self.volume_slider.setValue(int(round(self.current_volume)))
         self.volume_slider.valueChanged.connect(self.on_volume_slider_changed)
 
+        self.btn_fullscreen = QPushButton()
+        self.btn_fullscreen.setObjectName("btn_fullscreen")
+        self.btn_fullscreen.setProperty("role", "small")
+        self.btn_fullscreen.setFixedSize(34, 30)
+        self.btn_fullscreen.setCursor(Qt.PointingHandCursor)
+        self.btn_fullscreen.clicked.connect(self.toggle_fullscreen)
+
+        self.update_subtitles_icon()
         self.update_volume_icon()
+        self.update_fullscreen_icon()
 
         controls.addWidget(self.btn_open)
-        controls.addWidget(self.btn_back30)
         controls.addWidget(self.btn_back10)
         controls.addWidget(self.btn_play)
         controls.addWidget(self.btn_fwd10)
-        controls.addWidget(self.btn_fwd30)
+        controls.addWidget(self.btn_subtitles)
         controls.addWidget(self.btn_volume)
         controls.addWidget(self.volume_slider)
         controls.addWidget(self.btn_fullscreen)
@@ -1574,7 +1684,15 @@ class NeonSyncsWindow(QWidget):
                 if value is not None:
                     self.mpv_mute_signal.emit(bool(value))
 
-            for key in ("f", "F11", "MBTN_LEFT", "MBTN_LEFT_DBL", "SPACE"):
+            @self.player.property_observer("sid")
+            def _on_mpv_sid(_name, value):
+                self.mpv_sub_signal.emit()
+
+            @self.player.property_observer("sub-visibility")
+            def _on_mpv_sub_vis(_name, value):
+                self.mpv_sub_signal.emit()
+
+            for key in ("f", "F11", "MBTN_LEFT", "MBTN_LEFT_DBL", "SPACE", "UP", "DOWN"):
                 try:
                     self.player.command("keybind", key, "ignore")
                 except Exception:
@@ -1584,8 +1702,14 @@ class NeonSyncsWindow(QWidget):
             def _mpv_left_click():
                 pass
 
-            @self.player.on_key_press("SPACE")
+            self._last_space_press_time = 0.0
+
+            @self.player.on_key_press("SPACE", mode="force")
             def _mpv_toggle_pause():
+                now = time.time()
+                if now - getattr(self, "_last_space_press_time", 0.0) < 0.25:
+                    return
+                self._last_space_press_time = now
                 self.pause_toggle_requested.emit()
 
             @self.player.on_key_press("f")
@@ -1611,14 +1735,6 @@ class NeonSyncsWindow(QWidget):
             @self.player.on_key_press("LEFT")
             def _mpv_seek_back():
                 self.seek_requested.emit(-10)
-
-            @self.player.on_key_press("UP")
-            def _mpv_seek_fwd_big():
-                self.seek_requested.emit(60)
-
-            @self.player.on_key_press("DOWN")
-            def _mpv_seek_back_big():
-                self.seek_requested.emit(-60)
         except Exception:
             self.player = None
 
@@ -1808,6 +1924,7 @@ class NeonSyncsWindow(QWidget):
         if self.is_fullscreen:
             return
         self.is_fullscreen = True
+        self.shortcut_space.setEnabled(True)
         self.right_panel.hide()
         self.controls_widget.hide()
         self.showFullScreen()
@@ -1816,6 +1933,7 @@ class NeonSyncsWindow(QWidget):
         if not self.is_fullscreen:
             return
         self.is_fullscreen = False
+        self.shortcut_space.setEnabled(False)
         self.right_panel.show()
         self.controls_widget.show()
         self.showNormal()
@@ -1892,6 +2010,178 @@ class NeonSyncsWindow(QWidget):
             code = langs[code] if 0 <= code < len(langs) else "en"
         self.on_language_selected(code)
 
+    def show_subtitles_menu(self):
+        """Ouvre le menu des sous-titres au-dessus ou sous le bouton, aligné avec le thème."""
+        if not hasattr(self, "subtitles_menu") or not hasattr(self, "btn_subtitles"):
+            return
+        if self.subtitles_menu.isVisible():
+            self.subtitles_menu.close()
+            return
+
+        self._build_subtitles_menu()
+
+        rtl = is_rtl()
+        self.subtitles_menu.setLayoutDirection(Qt.RightToLeft if rtl else Qt.LeftToRight)
+
+        menu_size = self.subtitles_menu.sizeHint()
+        btn_pos = self.btn_subtitles.mapToGlobal(QPoint(0, 0))
+
+        window = self.window()
+        win_pos = window.mapToGlobal(QPoint(0, 0))
+        win_w = window.width()
+        win_h = window.height()
+
+        if rtl:
+            x = btn_pos.x() + self.btn_subtitles.width() - menu_size.width()
+        else:
+            x = btn_pos.x()
+
+        # Place le menu au-dessus du bouton de la barre de contrôle si l'espace le permet
+        y = btn_pos.y() - menu_size.height() - 2
+        if y < win_pos.y() + 4:
+            y = btn_pos.y() + self.btn_subtitles.height() + 2
+
+        # Reste strictement dans les limites de la fenêtre
+        x = max(win_pos.x() + 4, min(x, win_pos.x() + win_w - menu_size.width() - 4))
+        y = max(win_pos.y() + 4, min(y, win_pos.y() + win_h - menu_size.height() - 4))
+
+        self.subtitles_menu.popup(QPoint(x, y))
+
+    def _build_subtitles_menu(self):
+        """Reconstruit dynamiquement le contenu du menu des sous-titres selon l'état réel de mpv."""
+        if not hasattr(self, "subtitles_menu"):
+            return
+        self.subtitles_menu.clear()
+
+        # 1. Charger un fichier de sous-titres externe
+        act_load = self.subtitles_menu.addAction(tr("subtitles_load"))
+        has_video = bool(getattr(self, "current_file", None))
+        act_load.setEnabled(has_video)
+        act_load.triggered.connect(self.load_subtitle_file)
+
+        # 2. Désactiver les sous-titres (Off)
+        act_off = self.subtitles_menu.addAction(tr("subtitles_off"))
+        act_off.setCheckable(True)
+
+        current_sid = None
+        current_sub_delay = 0.0
+        track_list = []
+        if getattr(self, "player", None):
+            try:
+                current_sid = self.player.sid
+            except Exception:
+                current_sid = None
+            try:
+                current_sub_delay = float(self.player.sub_delay or 0.0)
+            except Exception:
+                current_sub_delay = 0.0
+            try:
+                track_list = list(self.player.track_list or [])
+            except Exception:
+                track_list = []
+
+        is_off = current_sid in (False, None, "no", 0)
+        act_off.setChecked(is_off)
+        act_off.triggered.connect(self._disable_subtitles)
+
+        # 3. Liste des pistes de sous-titres (track-list, type sub)
+        sub_tracks = [t for t in track_list if isinstance(t, dict) and t.get("type") == "sub"]
+        if sub_tracks:
+            for t in sub_tracks:
+                t_id = t.get("id")
+                parts = []
+                if t.get("title"):
+                    parts.append(str(t["title"]))
+                if t.get("lang"):
+                    parts.append(f"({t['lang']})")
+                if parts:
+                    label = " ".join(parts)
+                else:
+                    label = tr("subtitles_track_n", id=t_id if t_id is not None else "?")
+
+                if t.get("external") or t.get("external-filename"):
+                    label = f"{label} [{tr('subtitles_external')}]"
+
+                act_t = self.subtitles_menu.addAction(label)
+                act_t.setCheckable(True)
+                is_selected = bool(t.get("selected")) or (current_sid is not None and str(current_sid) == str(t_id))
+                act_t.setChecked(is_selected and not is_off)
+                act_t.triggered.connect(lambda _=False, tid=t_id: self._set_subtitle_track(tid))
+        else:
+            no_tracks = self.subtitles_menu.addAction(tr("subtitles_no_tracks"))
+            no_tracks.setEnabled(False)
+
+        # 4. Séparateur et réglage du décalage
+        self.subtitles_menu.addSeparator()
+
+        rounded_delay = round(current_sub_delay, 1)
+        delay_val_str = f"\u2066{rounded_delay:+.1f}\u2069" if rounded_delay > 0 else f"\u2066{rounded_delay:.1f}\u2069"
+        act_delay_header = self.subtitles_menu.addAction(tr("subtitles_delay_value", value=delay_val_str))
+        act_delay_header.setEnabled(False)
+
+        act_minus = self.subtitles_menu.addAction(tr("subtitles_delay_minus"))
+        act_minus.triggered.connect(lambda: self._adjust_sub_delay(-0.1))
+
+        act_plus = self.subtitles_menu.addAction(tr("subtitles_delay_plus"))
+        act_plus.triggered.connect(lambda: self._adjust_sub_delay(0.1))
+
+        act_reset = self.subtitles_menu.addAction(tr("subtitles_delay_reset"))
+        act_reset.triggered.connect(self._reset_sub_delay)
+
+    def load_subtitle_file(self):
+        """Ouvre un dialogue de sélection de sous-titres et charge le fichier dans mpv sans affecter le réseau."""
+        default_dir = os.path.dirname(self.current_file) if getattr(self, "current_file", None) else ""
+        filters = (
+            f"{tr('filter_subtitle_files')} (*.srt *.ass *.ssa *.vtt *.sub);;"
+            f"{tr('filter_all_files')} (*.*)"
+        )
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("dialog_load_subtitles_title"),
+            default_dir,
+            filters,
+        )
+        if not path:
+            return
+        if getattr(self, "player", None):
+            try:
+                self.player.command("sub-add", path, "select")
+            except Exception:
+                self.set_status("status_error", state="error", message="error_load_subtitles")
+
+    def _disable_subtitles(self):
+        """Désactive les sous-titres localement dans mpv."""
+        if getattr(self, "player", None):
+            try:
+                self.player.command("set", "sid", "no")
+            except Exception:
+                pass
+
+    def _set_subtitle_track(self, track_id):
+        """Sélectionne une piste de sous-titres spécifique localement dans mpv."""
+        if getattr(self, "player", None) and track_id is not None:
+            try:
+                self.player.command("set", "sid", track_id)
+            except Exception:
+                pass
+
+    def _adjust_sub_delay(self, delta: float):
+        """Ajuste le décalage des sous-titres localement dans mpv par pas de 0,1 s."""
+        if getattr(self, "player", None):
+            try:
+                cur = float(self.player.sub_delay or 0.0)
+                self.player.sub_delay = round(cur + delta, 1)
+            except Exception:
+                pass
+
+    def _reset_sub_delay(self):
+        """Réinitialise le décalage des sous-titres à 0.0 s localement dans mpv."""
+        if getattr(self, "player", None):
+            try:
+                self.player.sub_delay = 0.0
+            except Exception:
+                pass
+
     def add_user_chat_message(self, sender: str, message: str):
         self.chat_history.append({"type": "user", "sender": sender, "message": message})
         self.chat_list.addItem(f"\u2066{sender}\u2069: {message}")
@@ -1925,12 +2215,15 @@ class NeonSyncsWindow(QWidget):
         self.setWindowTitle(tr("window_title"))
 
         self.btn_open.setText(tr("open_file"))
-        self.btn_back30.setText(tr("back_30"))
         self.btn_back10.setText(tr("back_10"))
         self.btn_play.setText(tr("play_pause"))
         self.btn_fwd10.setText(tr("fwd_10"))
-        self.btn_fwd30.setText(tr("fwd_30"))
-        self.btn_fullscreen.setText(tr("fullscreen"))
+        if hasattr(self, "btn_fullscreen"):
+            self.btn_fullscreen.setToolTip(tr("fullscreen"))
+            self.update_fullscreen_icon()
+        if hasattr(self, "btn_subtitles"):
+            self.btn_subtitles.setToolTip(tr("subtitles"))
+            self.update_subtitles_icon()
         if hasattr(self, "update_volume_icon"):
             self.update_volume_icon()
 
@@ -2014,6 +2307,9 @@ class NeonSyncsWindow(QWidget):
             self.lang_menu.setLayoutDirection(direction)
             for act in self.lang_menu.actions():
                 act.setChecked(act.data() == cur_lang)
+
+        if hasattr(self, "subtitles_menu"):
+            self.subtitles_menu.setLayoutDirection(direction)
 
         self.style().unpolish(self)
         self.style().polish(self)

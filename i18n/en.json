@@ -67,5 +67,20 @@
   "tooltip_language": "Language",
   "tooltip_volume": "Volume",
   "tooltip_mute": "Mute",
-  "tooltip_unmute": "Unmute"
+  "tooltip_unmute": "Unmute",
+  "subtitles": "Subtitles",
+  "subtitles_load": "Load subtitle file…",
+  "subtitles_off": "Off",
+  "subtitles_no_tracks": "No subtitle tracks",
+  "subtitles_track_n": "Track {id}",
+  "subtitles_external": "external",
+  "subtitles_delay": "Delay",
+  "subtitles_delay_value": "Delay: {value} s",
+  "subtitles_delay_minus": "Delay −0.1 s",
+  "subtitles_delay_plus": "Delay +0.1 s",
+  "subtitles_delay_reset": "Reset delay",
+  "dialog_load_subtitles_title": "Load subtitle file",
+  "filter_subtitle_files": "Subtitle files",
+  "filter_all_files": "All files",
+  "error_load_subtitles": "Failed to load subtitles"
 }

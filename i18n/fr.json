@@ -67,5 +67,20 @@
   "tooltip_language": "Langue",
   "tooltip_volume": "Volume",
   "tooltip_mute": "Couper le son",
-  "tooltip_unmute": "Activer le son"
+  "tooltip_unmute": "Activer le son",
+  "subtitles": "Sous-titres",
+  "subtitles_load": "Charger un fichier de sous-titres…",
+  "subtitles_off": "Désactivé",
+  "subtitles_no_tracks": "Aucune piste de sous-titres",
+  "subtitles_track_n": "Piste {id}",
+  "subtitles_external": "externe",
+  "subtitles_delay": "Décalage",
+  "subtitles_delay_value": "Décalage : {value} s",
+  "subtitles_delay_minus": "Décalage −0.1 s",
+  "subtitles_delay_plus": "Décalage +0.1 s",
+  "subtitles_delay_reset": "Réinitialiser le décalage",
+  "dialog_load_subtitles_title": "Charger un fichier de sous-titres",
+  "filter_subtitle_files": "Fichiers de sous-titres",
+  "filter_all_files": "Tous les fichiers",
+  "error_load_subtitles": "Impossible de charger les sous-titres"
 }

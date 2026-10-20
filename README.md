@@ -22,8 +22,9 @@ Official website: https://neonsyncs.com
 - Embedded mpv video player without external playback windows.
 - Seekable progress bar reflecting current playback position and total duration.
 - Local volume control slider with mute button and persistent volume settings.
-- Jump controls with dedicated 10s and 30s buttons, plus keyboard arrow shortcuts.
-- Fullscreen mode (F, F11, Escape, or double-click on the video) that hides all side panels and controls.
+- Local subtitles: external SRT, ASS and VTT files and embedded tracks, with delay adjustment.
+- Jump controls with dedicated 10 s jump buttons plus the Left and Right arrow keys (10 s).
+- Fullscreen mode (F, F11, Escape, or double-click on the video; Space toggles play and pause in fullscreen) that hides all side panels and controls.
 - Integrated text chat and participant user list.
 - Warning banner when participants load video files with differing names or durations.
 - Four interface languages: English, French, Russian, and Arabic with Right-To-Left layout and live in-app switching via header language button.
