@@ -5,6 +5,16 @@ All notable changes to NeonSyncs are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Local subtitles support with external subtitle file loading (SRT, ASS/SSA, VTT, SUB), embedded and external track selection, and subtitle delay adjustment.
+- Space key toggles play and pause in fullscreen mode, routing through the standard Play/Pause action and synchronization path.
+
+### Changed
+- Simplified playback control bar: removed 30 s jump buttons and replaced the text fullscreen button with a compact icon button.
+- Restricted keyboard jumps to 10 s only (Left and Right arrows); Up and Down arrow keys no longer jump by 60 s and default mpv 60 s bindings are neutralized.
+
 ## [2.3.0] - 2026-10-18
 
 ### Added

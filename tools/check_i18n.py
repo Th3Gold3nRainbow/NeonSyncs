@@ -101,7 +101,7 @@ def check_hardcoded_strings():
         "disconnected", "error", "SPACE", "F11", "ESC", "MBTN_LEFT_DBL",
         "RIGHT", "LEFT", "UP", "DOWN", "neonsyncs.watchparty.client",
         "English", "Français", "Русский", "العربية", "en", "fr", "ru", "ar",
-        "langSelector"
+        "langSelector", "btn_subtitles", "btn_fullscreen", "FS", "CC", "subtitlesMenu"
     }
 
     try:
@@ -148,8 +148,8 @@ def check_retranslate_ui():
         content = f.read()
 
     required_retranslate_targets = [
-        "setWindowTitle", "btn_open", "btn_back30", "btn_back10", "btn_play",
-        "btn_fwd10", "btn_fwd30", "btn_fullscreen", "lbl_conn", "combo_mode",
+        "setWindowTitle", "btn_open", "btn_back10", "btn_play",
+        "btn_fwd10", "btn_fullscreen", "btn_subtitles", "lbl_conn", "combo_mode",
         "lbl_user", "lbl_password", "input_password", "input_user", "btn_create_room",
         "lbl_room_id", "input_room_id", "btn_join_room", "btn_copy_id",
         "btn_leave_p2p", "btn_retry_p2p", "lbl_host", "lbl_port", "lbl_room", "input_room",

@@ -67,5 +67,20 @@
   "tooltip_language": "Язык",
   "tooltip_volume": "Громкость",
   "tooltip_mute": "Отключить звук",
-  "tooltip_unmute": "Включить звук"
+  "tooltip_unmute": "Включить звук",
+  "subtitles": "Субтитры",
+  "subtitles_load": "Загрузить файл субтитров…",
+  "subtitles_off": "Выкл.",
+  "subtitles_no_tracks": "Нет дорожек субтитров",
+  "subtitles_track_n": "Дорожка {id}",
+  "subtitles_external": "внешний",
+  "subtitles_delay": "Задержка",
+  "subtitles_delay_value": "Задержка: {value} с",
+  "subtitles_delay_minus": "Задержка −0.1 с",
+  "subtitles_delay_plus": "Задержка +0.1 с",
+  "subtitles_delay_reset": "Сбросить задержку",
+  "dialog_load_subtitles_title": "Загрузить файл субтитров",
+  "filter_subtitle_files": "Файлы субтитров",
+  "filter_all_files": "Все файлы",
+  "error_load_subtitles": "Не удалось загрузить субтитры"
 }
