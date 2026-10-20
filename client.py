@@ -1692,7 +1692,10 @@ class NeonSyncsWindow(QWidget):
             def _on_mpv_sub_vis(_name, value):
                 self.mpv_sub_signal.emit()
 
-            for key in ("f", "F11", "MBTN_LEFT", "MBTN_LEFT_DBL", "SPACE", "UP", "DOWN"):
+            for key in (
+                "f", "F11", "MBTN_LEFT", "MBTN_LEFT_DBL", "SPACE", "UP", "DOWN",
+                "Shift+PGUP", "Shift+PGDWN", "FORWARD", "REWIND",
+            ):
                 try:
                     self.player.command("keybind", key, "ignore")
                 except Exception:

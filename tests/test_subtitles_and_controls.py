@@ -180,6 +180,33 @@ class TestSubtitlesAndControls(unittest.TestCase):
             self.win.btn_back10.click()
             mock_seek.assert_called_once_with(-10)
 
+    def test_long_jumps_mpv_keybind_ignored(self):
+        """La commande keybind <touche> ignore est émise pour Shift+PGUP, Shift+PGDWN, FORWARD, REWIND."""
+        commands = []
+        mock_p = MagicMock()
+        mock_p.command.side_effect = lambda *args: commands.append(args)
+
+        with patch("mpv.MPV", return_value=mock_p):
+            with patch.object(client, "P2PClient"):
+                test_win = client.NeonSyncsWindow()
+
+        for k in ("Shift+PGUP", "Shift+PGDWN", "FORWARD", "REWIND"):
+            self.assertIn(("keybind", k, "ignore"), commands, f"keybind {k} ignore non émis")
+
+        test_win.show()
+        test_win.activateWindow()
+        self.app.setActiveWindow(test_win)
+
+        with patch.object(test_win, "seek_relative") as mock_seek:
+            QTest.keyClick(test_win, Qt.Key_Right)
+            mock_seek.assert_called_once_with(10)
+            mock_seek.reset_mock()
+
+            QTest.keyClick(test_win, Qt.Key_Left)
+            mock_seek.assert_called_once_with(-10)
+
+        test_win.close()
+
     def test_no_60s_seek_in_client_code(self):
         """Plus aucun saut de 60 dans le code de client.py."""
         client_path = os.path.join(REPO_ROOT, "client.py")
