@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Simplified playback control bar: removed 30 s jump buttons and replaced the text fullscreen button with a compact icon button.
 - Restricted keyboard jumps to 10 s only (Left and Right arrows); Up and Down arrow keys no longer jump by 60 s and default mpv 60 s bindings are neutralized.
+- Disabled mpv's built-in jumps of one minute or more (Shift+Page Up, Shift+Page Down and the multimedia fast-forward and rewind keys).
 
 ## [2.3.0] - 2026-10-18
 
